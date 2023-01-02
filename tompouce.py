@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 import numpy as np
-from numpy.linalg import inv
+from numpy.linalg import inv, solve
 import json
 from typing import Union, Optional, Callable
 import numpy.typing as npt
 from typeguard import typechecked
+import matplotlib.pyplot as plt
+
 
 vector = matrix = npt.NDArray[np.float_]
 
@@ -19,8 +21,9 @@ class Material():
     ==========
 
     The class attributes can be subdivided into three categories,
-    namely i) meta data, 2) thermoelastic properties and 3)
-    strengths. The numerical data should be provided in SI units.
+    namely 1) meta data, 2) thermoelastic properties and 3)
+    strength values. The numerical data should be provided in SI
+    units.
 
     Meta data
     ---------
@@ -158,9 +161,6 @@ class Material():
         return s
 
 
-TC1200 = Material('materials/TC1200UD.json')
-
-
 @typechecked
 class Ply():
     """Class used to represent a ply.
@@ -186,6 +186,16 @@ class Ply():
     """
     _R = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 2]])  # Reuter matrix
 
+    def _wrap_pi(theta: float) -> float:
+        """A clumsy function to wrap angles between -pi/2 < theta <= pi/2."""
+        theta = (theta + np.pi) % (2 * np.pi) - np.pi
+        if -np.pi/2 < theta <= np.pi/2:
+            return theta
+        elif np.pi/2 < theta <= np.pi:
+            return theta-np.pi
+        elif -np.pi <= theta <= -np.pi/2:
+            return theta+np.pi
+
     def __init__(self, material: Material, theta: float, t: float):
         """Initializes Ply instance.
 
@@ -200,7 +210,7 @@ class Ply():
 
         """
         self.mat = material
-        self.theta = theta
+        self.theta = Ply._wrap_pi(theta)
         self.t = t
 
     def _T(self) -> matrix:
@@ -226,13 +236,15 @@ class Ply():
         T = self._T()
         return Ply._R @ inv(T) @ inv(Ply._R) @ self.mat.alpha()
 
-    def stress(self, strain: vector, CS: str = 'ply') -> vector:
+    def stress(self, strain: vector, dT: float, CS: str = 'ply') -> vector:
         """Returns stress in ply or material CS.
 
         Arguments
         ---------
         strain : np.ndarray(dim=1, dtype=float)
             Strain vector in ply CS.
+        dT : float
+            Temperature difference.
         CS : str - 'ply' or 'mat' (defaults to 'ply')
             Coordinate system to use.
 
@@ -242,20 +254,23 @@ class Ply():
             Stress vector in selected coordinate system.
 
         """
+        stress = self.C() @ (strain - self.alpha()*dT)
         if CS == 'ply':
-            return self.C() @ strain
+            return stress
         elif CS == 'mat':
-            return self.T() @ self.C() @ strain
+            return self.T() @ stress
         else:
             raise ValueError("expected 'ply' or 'mat' as second argument")
 
-    def strain(self, stress: vector, CS: str = 'ply') -> vector:
+    def strain(self, stress: vector, dT: float, CS: str = 'ply') -> vector:
         """Returns strain in ply or material CS.
 
         Arguments
         ---------
         stress : np.ndarray(dim=1, dtype=float)
             Stress vector in ply CS.
+        dT : float
+            Temperature difference.
         CS : str - 'ply' or 'mat' (defaults to 'ply')
             Coordinate system to use.
 
@@ -265,10 +280,11 @@ class Ply():
             Strain vector in selected coordinate system.
 
         """
+        strain = self.S() @ stress + self.alpha()*dT
         if CS == 'ply':
-            return self.S() @ stress
+            return strain
         elif CS == 'mat':
-            return Ply._R @ self.T() @ inv(Ply._R) @ self.S() @ stress
+            return Ply._R @ self.T() @ inv(Ply._R) @ strain
         else:
             raise ValueError("expected 'ply' or 'mat' as second argument")
 
@@ -276,9 +292,6 @@ class Ply():
         s = f"{self.mat.name:20s} {self.t*1E3:10.2f} mm" + \
             f"{self.theta*180/np.pi:10.1f} deg"
         return s
-
-
-P = Ply(TC1200, np.pi/2, 0.15E-3)
 
 
 @typechecked
@@ -299,22 +312,24 @@ class Laminate():
         Returns ABD matrix.
     abd()
         Return abd matrix.
-    H()
+    thickness()
         Returns laminate thickness.
+    number_of_plies()
+        Returns number of plies.
     engineering_constants()
         Return engineering constants for laminate.
 
     Layup manipulation
     -----------------
-    append(Ply)
+    layup_append(Ply)
         Append Ply to bottom of layup.
-    insert(Ply, int)
+    layup_insert(Ply, int)
         Insert Ply at ith position.
-    remove(int)
+    layup_remove(int)
         Remove i-th Ply from layup (defaults to last Ply)
-    split(int)
+    layup_split(int)
         Split layup at i-th position and return two new Laminates.
-    rotate(int)
+    layup_rotate(int)
         Rotate layup with provided angle.
 
     """
@@ -331,7 +346,7 @@ class Laminate():
         material : Material (required when layup is a list[float])
             Material used in the layup.
         thickness : float (required when layup is a list[float])
-            Ply thickness.
+            Ply thickness (equal for all plies).
 
         """
         if isinstance(layup[0], Ply):
@@ -339,9 +354,37 @@ class Laminate():
         elif isinstance(layup[0], float):
             self.layup = [Ply(material, phi, thickness) for phi in layup]
 
+    def layup_append(self, ply: Ply):
+        """Appends a Ply object to the layup."""
+        if isinstance(ply, Ply):
+            self.layup.append(ply)
+        else:
+            raise TypeError("expected a Ply object")
+
+    def layup_insert(self, ply: Ply, i: int):
+        """Inserts a Ply object at the i-th position in the layup."""
+        if isinstance(ply, Ply):
+            self.layup.insert(i)
+        else:
+            raise TypeError("expected a Ply object")
+
+    def layup_remove(self, i: int = -1):
+        """Removes i-th ply from layup, defaults to last ply."""
+        self.layup.pop(i)
+
+    def layup_split(self, i: int) -> tuple[Laminate, Laminate]:
+        """Splits laminate before i-th ply and returns both halves."""
+        L1, L2 = self.layup[:i], self.layup[i:]
+        return Laminate(layup=L1), Laminate(layup=L2)
+
+    def layup_rotate(self, phi: float):
+        """Rotates all plies in laminates by angle phi."""
+        for ply in self.layup:
+            ply.theta += phi
+
     def ABD(self) -> matrix:
         """Returns ABD matrix."""
-        z = self._ply_edges()
+        z = self._ply_interfaces()
         A = np.zeros((3, 3))
         B = np.zeros((3, 3))
         D = np.zeros((3, 3))
@@ -356,20 +399,10 @@ class Laminate():
         """Returns abd matrix."""
         return inv(self.ABD())
 
-    def H(self) -> float:
-        """Returns laminate thickness."""
-        return np.sum([ply.t for ply in self.layup])
-
-    def _ply_edges(self) -> vector:
-        """Returns location of ply edges"""
-        H, N = self.H(), len(self.layup)
-        z = np.linspace(-H/2, H/2, N+1)
-        return z
-
     def engineering_constants(self) -> dict[str, float]:
-        """Returns laminate engineering constants"""
+        """Returns dict with laminate engineering constants."""
         abd = self.abd()
-        H = self.H()
+        H = self.thickness()
         engcon = {'Ex': 1/abd[0, 0]/H,
                   'Ey': 1/abd[1, 1]/H,
                   'Gxy': 1/abd[2, 2]/H,
@@ -379,37 +412,200 @@ class Laminate():
                   'Efy': 12/abd[4, 4]/H**3}
         return engcon
 
-    def append(self, ply: Ply):
-        """Appends a Ply object to the layup."""
-        if isinstance(ply, Ply):
-            self.layup.append(ply)
-        else:
-            raise TypeError("expected a Ply object")
+    def _ply_interfaces(self) -> vector:
+        """Returns location of ply interfaces - includes outer surfaces."""
+        H, N = self.thickness(), len(self.layup)
+        z = np.linspace(-H/2, H/2, N+1)
+        return z
 
-    def insert(self, ply: Ply, i: int):
-        """Inserts a Ply object at the i-th position in the layup."""
-        if isinstance(ply, Ply):
-            self.layup.insert(i)
-        else:
-            raise TypeError("expected a Ply object")
-
-    def remove(self, i: int = -1):
-        """Removes i-th ply from layup, defaults to last ply."""
-        self.layup.pop(i)
-
-    def split(self, i: int) -> tuple[Laminate, Laminate]:
-        """Splits laminate before i-th ply and returns both halves."""
-        L1, L2 = self.layup[:i], self.layup[i:]
-        return Laminate(layup=L1), Laminate(layup=L2)
-
-    def rotate(self, phi: float):
-        """Rotates all plies in laminates by angle phi."""
+    def __str__(self) -> str:
+        s = "\n" + \
+           f"{'Material':24s} {'Thickness':11s} {'Orientation':10s}\n" + \
+            "------------------------------------------------ Top\n"
         for ply in self.layup:
-            ply.theta += phi
+            s += ply.__str__() + "\n"
+        s += "------------------------------------------------ Bottom\n" + \
+            f"# plies: {self.number_of_plies():<3}" +\
+            f" {1000*self.thickness():18.2f} mm\n"
+        s += "\nEngineering constants\n---------------------\n"
+        eng = self.engineering_constants()
+        s += f"Young's Modulus X:   {eng['Ex']/1E9:4.1f} GPa\n" + \
+             f"Young's Modulus Y:   {eng['Ey']/1E9:4.1f} GPa\n" + \
+             f"Shear Modulus X:     {eng['Gxy']/1E9:4.1f} GPa\n" + \
+             f"Poisson's ratio XY:  {eng['vxy']:4.2f}\n" + \
+             f"Poisson's ratio YX:  {eng['vyx']:4.2f}\n" + \
+             f"Flexural modulus X:  {eng['Efx']/1E9:4.1f} GPa\n" + \
+             f"Flexural modulus Y:  {eng['Efy']/1E9:4.1f} GPa\n"
+        return s
 
 
-class Loads():
-    pass
+class Load():
+    """
+    bla
+
+    """
+
+    def __init__(self):
+        self.F = np.nan * np.ones(6)
+        self.d = np.nan * np.ones(6)
+        self.dT = 0.0
+
+    def load_from_dict(self, load):
+        for i in range(6):
+            if load[i]['type'] == 'load':
+                self.F[i] = load[i]['value']
+            elif load[i]['type'] == 'def':
+                self.d[i] = load[i]['value']
+        if 'dT' in load:
+            self.dT = load['dT']
+        else:
+            self.dT = 20.0
+
+    def _masks(self) -> tuple[vector]:
+        iF = 1 * ~np.isnan(self.F)
+        iD = 1 * ~np.isnan(self.d)
+        return iF, iD
+
+    def save_json(self, fn):
+        pass
+
+    def load_json(self, fn):
+        pass
+
+    def _valid_load(self):
+        iF, iD = self._masks()
+        if all(iF + iD == 1):
+            return True
+        else:
+            return False
+
+    def __str__(self):
+        pass
+
+
+class Result():
+    """bla
+
+    """
+
+    def __init__(self, laminate: Laminate, load: Load):
+        self.laminate = laminate
+        self.load = load
+
+    def thermal_load(self) -> tuple[vector, vector]:
+        """Returns thermal load and deformation vector for applied Load.
+
+        Returns
+        -------
+        F_th : np.ndarray(dim=1, dtype=float)
+            Thermal force vector.
+        d_th : np.ndarray(dim=1, dtype=float)
+            Deformation vector due to thermal force.
+
+        """
+        z = self.laminate._ply_interfaces()
+        N = M = np.zeros(3)
+        dT = self.load.dT
+        for i, ply in enumerate(self.laminate.layup):
+            N = N + dT*ply.C() @  ply.alpha() * (z[i+1] - z[i])
+            M = M + dT*ply.C() @  ply.alpha() * (z[i+1]**2 - z[i]**2)/2
+        F_th = np.block([N, M])
+        d_th = self.laminate.abd()@F_th
+        return F_th, d_th
+
+    def apply_load(self) -> tuple[vector, vector]:
+        """Returns force and deformation vector for applied Load.
+
+        Parameters
+        ----------
+        load - Load
+            Object from Load class with information about loading conditions.
+
+        Returns
+        -------
+        F : np.ndarray(dim=1, dtype=float)
+            Force vector.
+        d : np.ndarray(dim=1, dtype=float)
+            Deformation vector.
+
+        """
+        F = self.load.F
+        d = self.load.d
+        iF, iD = self.load._masks()
+        _, d_thermal = self.thermal_load()
+        if all(iF):
+            d = self.laminate.abd()@F + d_thermal
+        elif all(iD):
+            F = self.laminate.ABD()@(d - d_thermal)
+        else:
+            abd = self.laminate.abd()
+            aap = (abd[:, iF][iD])@F[iF]
+            noot = d[iD] - aap - d_thermal[iD]
+            F[iD] = solve(abd[:, iD][iD], noot)
+            d = abd@F + d_thermal
+        return F, d
+
+    def strain(self) -> matrix:
+        """Returns strain on ply interfaces."""
+        _, d = self.apply_load()
+        z_int = self.laminate._ply_interfaces()
+        strain = d[:3][..., None] + z_int*d[3:][..., None]
+        return strain
+
+    def stress(self, CS: str = 'ply') -> matrix:
+        """Returns stress on top and bottom for each ply.
+
+        Argument
+        --------
+        CS : str - 'ply' or 'mat' (defaults to 'ply')
+            Coordinate system to use.
+
+        Returns
+        -------
+        stress : np.ndarray(dim=2, dtype=float)
+
+            Stresses in selected coordinate system. The returned
+            matrix is of shape (2*N, 3), with N the number of plies.
+            For each ply the stress state at its top and bottom are
+            returned. For the ith ply:
+
+            - column i*2 holds the stress state at its top
+            - column i*2+1 holds the stress state at its bottom
+
+            The three rows correspond to the three in-plane stresses,
+            i.e. the two normal stresses and the shear stress.
+
+        """
+        dT = self.load.dT
+        strain = self.strain()
+        stress = np.zeros((3, 2*len(self.laminate.layup)))
+        for i, ply in enumerate(self.laminate.layup):
+            stress[:, i*2] = ply.stress(strain[:, i], dT, CS)
+            stress[:, i*2+1] = ply.stress(strain[:, i+1], dT, CS)
+        return stress
+
+    def plot_stress(self, comp: int = 0, CS: str = 'ply'):
+        """Plots stress.
+
+        Arguments
+        ---------
+        comp : int (0, 1, 2)
+            Stress component to plot:
+            - 0 : 1 or 1* component
+            - 1 : 2 or 2* component
+            - 2 : shear stress
+        CS : str - 'ply' or 'mat' (defaults to 'ply')
+            Coordinate system to use.
+
+        """
+        fig, ax = plt.subplots()
+        ax.plot(self.stress(CS)[comp], self.z_int())
+        plt.show()
+
+    def z_int(self) -> vector:
+        """Returns z-coordinates for the top and bottom surface of each ply."""
+        z = self.laminate._ply_interfaces()
+        return np.repeat(z, 2)[1:-1]
 
 
 @typechecked
@@ -460,3 +656,33 @@ def QI_layup(N: int) -> list:
     else:
         raise ValueError("The number of plies should be a multiple of 8.")
     return layup
+
+
+TC1200 = Material('materials/TC1200UD.json')
+layup = QI_layup(8)
+L = Laminate(layup=layup, material=TC1200, thickness=0.15E-3)
+
+load_f = [{'type': 'load', 'value': 100.0},
+          {'type': 'load', 'value': 0.0},
+          {'type': 'load', 'value': 0.0},
+          {'type': 'load', 'value': 0.0},
+          {'type': 'load', 'value': 0.0},
+          {'type': 'load', 'value': 0.0}]
+
+F = Load()
+F.load_from_dict(load_f)
+R = Result(L, F)
+
+load_d = [{'type': 'def', 'value': 1.5E-6},
+          {'type': 'def', 'value': -5E-7},
+          {'type': 'def', 'value': 0.0},
+          {'type': 'def', 'value': 0.0},
+          {'type': 'def', 'value': 0.0},
+          {'type': 'def', 'value': 0.0}]
+
+load_m = [{'type': 'load', 'value': 100},
+          {'type': 'load', 'value': 0.0},
+          {'type': 'def', 'value': 0.0},
+          {'type': 'load', 'value': 0.0},
+          {'type': 'load', 'value': 0.0},
+          {'type': 'load', 'value': 0.0}]
