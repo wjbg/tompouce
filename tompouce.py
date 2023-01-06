@@ -90,14 +90,19 @@ class Material():
 
     def load_json(self, fname: str):
         """Loads data from json file."""
-        with open(fname, 'r') as fn:
-            self.load_from_dict(json.load(fn))
+        with open(fname, 'r') as f:
+            data = json.load(f)
+            if data['type'] == 'Material':
+                self.load_from_dict(data)
+            else:
+                raise KeyError("not a Load object")
 
     def save_json(self, fname: str):
         """Saves data to json file."""
         data = vars(self)
-        with open(fname, 'w') as fn:
-            json.dump(data, fn, sort_keys=True, indent=4)
+        data['type'] = 'Material'
+        with open(fname, 'w') as f:
+            json.dump(data, f, sort_keys=True, indent=4)
 
     def C(self) -> vector:
         """Returns stiffness matrix."""
@@ -319,6 +324,10 @@ class Laminate():
     engineering_constants()
         Return engineering constants for laminate.
 
+    Load
+    ----
+
+
     Layup manipulation
     -----------------
     layup_append(Ply)
@@ -353,6 +362,14 @@ class Laminate():
             self.layup = layup
         elif isinstance(layup[0], float):
             self.layup = [Ply(material, phi, thickness) for phi in layup]
+
+    def thickness(self) -> float:
+        """Returns laminate thickness."""
+        return sum([ply.t for ply in self.layup])
+
+    def number_of_plies(self) -> int:
+        """Returns number of plies."""
+        return len(self.layup)
 
     def layup_append(self, ply: Ply):
         """Appends a Ply object to the layup."""
@@ -413,10 +430,155 @@ class Laminate():
         return engcon
 
     def _ply_interfaces(self) -> vector:
-        """Returns location of ply interfaces - includes outer surfaces."""
+        """Returns location of ply interfaces; includes outer surfaces."""
         H, N = self.thickness(), len(self.layup)
         z = np.linspace(-H/2, H/2, N+1)
         return z
+
+    def thermal_load(self, load: Load) -> tuple[vector, vector]:
+        """Returns thermal load and accompanying deformation vector.
+
+        Arguments
+        ---------
+        load : Load class
+            Load case.
+
+        Returns
+        -------
+        F_th : np.ndarray(dim=1, dtype=float)
+            Thermal force vector.
+        d_th : np.ndarray(dim=1, dtype=float)
+            Deformation vector due to thermal force.
+
+        """
+        z = self._ply_interfaces()
+        N = M = np.zeros(3)
+        dT = load.dT
+        for i, ply in enumerate(self.layup):
+            N = N + dT*ply.C() @  ply.alpha() * (z[i+1] - z[i])
+            M = M + dT*ply.C() @  ply.alpha() * (z[i+1]**2 - z[i]**2)/2
+        F_th = np.block([N, M])
+        d_th = self.abd()@F_th
+        return F_th, d_th
+
+    def apply_load(self, load: Load) -> tuple[vector, vector]:
+        """Returns force and deformation vector for applied Load.
+
+        Arguments
+        ----------
+        load : Load
+            Object from Load class with information about loading conditions.
+
+        Returns
+        -------
+        F : np.ndarray(dim=1, dtype=float)
+            Force vector.
+        d : np.ndarray(dim=1, dtype=float)
+            Deformation vector.
+
+        """
+        F = load.F
+        d = load.d
+        iF, iD = load._masks()
+        _, d_thermal = self.thermal_load(load)
+        if all(iF):
+            d = self.abd()@F + d_thermal
+        elif all(iD):
+            F = self.ABD()@(d - d_thermal)
+        else:
+            abd = self.abd()
+            aap = (abd[:, iF][iD])@F[iF]
+            noot = d[iD] - aap - d_thermal[iD]
+            F[iD] = solve(abd[:, iD][iD], noot)
+            d = abd@F + d_thermal
+        return F, d
+
+    def strain(self, load: Load) -> matrix:
+        """Returns strain on ply interfaces due to Load.
+
+        Arguments
+        ----------
+        load : Load
+            Object from Load class with information about loading conditions.
+
+        Returns
+        -------
+        epsilon : np.ndarray(dim=2, dtype=float)
+            Strain vector at the ply interfaces.
+
+        """
+        _, d = self.apply_load(load)
+        z_int = self._ply_interfaces()
+        strain = d[:3][..., None] + z_int*d[3:][..., None]
+        return strain
+
+    def stress(self, load: Load, CS: str = 'ply') -> matrix:
+        """Returns stress on top and bottom for each ply due to Load.
+
+        Argument
+        --------
+        load : Load
+            Object from Load class with information about loading conditions.
+        CS : str - 'ply' or 'mat' (defaults to 'ply')
+            Coordinate system to use.
+
+        Returns
+        -------
+        stress : np.ndarray(dim=2, dtype=float)
+
+            Stresses in selected coordinate system. The returned
+            matrix is of shape (2*N, 3), with N the number of plies.
+            For each ply the stress state at its top and bottom are
+            returned. For the ith ply:
+
+            - column i*2 holds the stress state at its top
+            - column i*2+1 holds the stress state at its bottom
+
+            The three rows correspond to the three in-plane stresses,
+            i.e. the two normal stresses and the shear stress.
+
+        """
+        dT = load.dT
+        strain = self.strain(load)
+        stress = np.zeros((3, 2*len(self.layup)))
+        for i, ply in enumerate(self.layup):
+            stress[:, i*2] = ply.stress(strain[:, i], dT, CS)
+            stress[:, i*2+1] = ply.stress(strain[:, i+1], dT, CS)
+        return stress
+
+    def plot_stress(self, load: Load, comp: int = 0, CS: str = 'ply',
+                    ax: Optional[plt.Axes] = None) -> plt.Axes:
+        """Plots stress.
+
+        Arguments
+        ---------
+        load : Load
+            Object from Load class with information about loading conditions.
+        comp : int (0, 1, 2)
+            Stress component to plot:
+            - 0 : 1 or 1* component
+            - 1 : 2 or 2* component
+            - 2 : shear stress
+        CS : str - 'ply' or 'mat' (defaults to 'ply')
+            Coordinate system to use.
+        ax : plt.Axes (Optional)
+            Axes for plotting.
+
+        Returns
+        -------
+        ax : plt.Axes (Optional)
+            Axes for plotting.
+
+        """
+        if ax is not None:
+            fig, ax = plt.subplots()
+        ax.plot(self.stress(CS)[comp], self.z_int())
+        plt.show()
+
+    def z_int(self) -> vector:
+        """Returns z-coordinates for the top and bottom surface of each ply."""
+        z = self.laminate._ply_interfaces()
+        return np.repeat(z, 2)[1:-1]
 
     def __str__(self) -> str:
         s = "\n" + \
@@ -440,10 +602,49 @@ class Laminate():
 
 
 class Load():
-    """
-    bla
+    """Class to represent a loading condition.
+
+    Attributes
+    ==========
+    F : np.ndarray(dim=1, dtype=float)
+        Force vector.
+    d : np.ndarray(dim=1, dtype=float)
+        Deformation vector.
+    dT : float
+        Temperature difference.
+
+    The force and deformation vectors have six elements:
+
+    0) normal force (F) and strain (d) in X-direction
+    1) normal force (F) and strain (d) in Y-direction
+    2) shear force (F) and shear strain (d)
+    3) bending moment (F) and curvature (d) in X-direction
+    4) bending moment (F) and curvature (d) in Y-direction
+    5) twisting moment (F) and twisting curvature (d)
+
+    A valid load condition requires that only a force (or a moment) OR
+    a strain (or a curvature) is imposed in a given direction. As an
+    example, in case a normal force is applied in X-direction, the
+    corresponding strain cannot be provided and must be calculated.
+    The first element in the force vector F equals the imposed force,
+    while the corresponding element in the deformation vector d should
+    then be np.nan.
+
+    Methods
+    =======
+    load_from_dict(data)
+        Loads data from dictionary and sets keys as ojbect's attributes.
+    load_json(fname)
+        Loads data from json file.
+    save_json(fname)
+        Saves data to json file.
+    valid_load()
+        Returns True if load condition is valid.
 
     """
+
+    _labels = [('Fx', 'ex'), ('Fy', 'ey'), ('Fxy', 'exy'),
+               ('Mx', 'kx'), ('My', 'ky'), ('Mxy', 'kxy')]
 
     def __init__(self):
         self.F = np.nan * np.ones(6)
@@ -451,28 +652,58 @@ class Load():
         self.dT = 0.0
 
     def load_from_dict(self, load):
-        for i in range(6):
-            if load[i]['type'] == 'load':
-                self.F[i] = load[i]['value']
-            elif load[i]['type'] == 'def':
-                self.d[i] = load[i]['value']
-        if 'dT' in load:
-            self.dT = load['dT']
-        else:
-            self.dT = 20.0
+        """Load data from dictionary.
+
+        Argument
+        --------
+        load : dict
+            Dictionary with the following keys:
+
+            - Fx OR ex      : normal load or strain in x-direction
+            - Fy OR ey      : normal load or strain in y-direction
+            - Fxy OR exy    : shear load or shear strain
+            - Mx OR kx      : bending moment or curvature in x-direction
+            - My OR ky      : bending moment or curvature in y-direction
+            - Mxy OR kxy    : twisting mometn or curvature
+            - dT (optional) : temperature difference
+
+        """
+        for i, label in enumerate(Load._labels):
+            if label[0] in load & label[1] in load:
+                self.F[0] = load[label[0]]
+            elif label[0] not in load & label[1] in load:
+                self.d[0] = load[label[1]]
+            elif label[0] in load & label[1] in load:
+                raise KeyError("overdefined problem:" +
+                               f" both {label[0]} and {label[1]} provided")
+            elif label[0] not in load & label[1] not in load:
+                raise KeyError("underdefined problem:" +
+                               f" no {label[0]} or {label[1]} provided")
+        self.dT = load['dT'] if 'dT' in load else 20.0
 
     def _masks(self) -> tuple[vector]:
         iF = 1 * ~np.isnan(self.F)
         iD = 1 * ~np.isnan(self.d)
         return iF, iD
 
-    def save_json(self, fn):
-        pass
+    def save_json(self, fname):
+        """Saves data to json file."""
+        data = vars(self)
+        data['type'] = 'Load'
+        with open(fname, 'w') as f:
+            json.dump(data, f, sort_keys=True, indent=4)
 
-    def load_json(self, fn):
-        pass
+    def load_json(self, fname):
+        """Loads data from json file."""
+        with open(fname, 'r') as f:
+            data = json.load(f)
+            if data['type'] == 'Load':
+                self.load_from_dict(data)
+            else:
+                raise KeyError("not a Load object")
 
-    def _valid_load(self):
+    def valid_load(self):
+        """Returns True if loading condition is valid."""
         iF, iD = self._masks()
         if all(iF + iD == 1):
             return True
@@ -480,132 +711,61 @@ class Load():
             return False
 
     def __str__(self):
-        pass
+        s = f"{'Force':>16s}      {'Deformation':12s}\n" + \
+            "--------------------------------------\n"
+        for i in range(3):
+            s += f"{self.F[i]/1E3:>11.2f} kN/m {self.d[i]:8.2f} m/m\n"
+        for i in range(3, 6):
+            s += f"{self.F[i]/1E3:>10.2f} kNm/m  {self.d[i]:7.2f} 1/m\n"
+        s += f"\nDelta T: {self.dT:5.1f} C\n"
+        return s.replace("nan", "???")
 
 
-class Result():
-    """bla
+@typechecked
+def pressure_vessel(P: float, R: float) -> Load:
+    """Returns Load object for a pressure vessel.
+
+    Arguments
+    ---------
+    P : float
+        Internal pressure.
+    R : float
+        Radius of the pressure vessel.
+
+    Returns
+    -------
+    load : Load object
+        Loading condition.
 
     """
+    load = Load()
+    load.F = np.zeros(6)
+    load.F[0] = P*R/2
+    load.F[1] = R*R
+    return load
 
-    def __init__(self, laminate: Laminate, load: Load):
-        self.laminate = laminate
-        self.load = load
 
-    def thermal_load(self) -> tuple[vector, vector]:
-        """Returns thermal load and deformation vector for applied Load.
+@typechecked
+def torsion_shaft(T: float, R: float) -> Load:
+    """Returns Load object for a torsion shaft.
 
-        Returns
-        -------
-        F_th : np.ndarray(dim=1, dtype=float)
-            Thermal force vector.
-        d_th : np.ndarray(dim=1, dtype=float)
-            Deformation vector due to thermal force.
+    Arguments
+    ---------
+    T : float
+        Torque.
+    R : float
+        Radius.
 
-        """
-        z = self.laminate._ply_interfaces()
-        N = M = np.zeros(3)
-        dT = self.load.dT
-        for i, ply in enumerate(self.laminate.layup):
-            N = N + dT*ply.C() @  ply.alpha() * (z[i+1] - z[i])
-            M = M + dT*ply.C() @  ply.alpha() * (z[i+1]**2 - z[i]**2)/2
-        F_th = np.block([N, M])
-        d_th = self.laminate.abd()@F_th
-        return F_th, d_th
+    Returns
+    -------
+    load : Load object
+        Loading condition.
 
-    def apply_load(self) -> tuple[vector, vector]:
-        """Returns force and deformation vector for applied Load.
-
-        Parameters
-        ----------
-        load - Load
-            Object from Load class with information about loading conditions.
-
-        Returns
-        -------
-        F : np.ndarray(dim=1, dtype=float)
-            Force vector.
-        d : np.ndarray(dim=1, dtype=float)
-            Deformation vector.
-
-        """
-        F = self.load.F
-        d = self.load.d
-        iF, iD = self.load._masks()
-        _, d_thermal = self.thermal_load()
-        if all(iF):
-            d = self.laminate.abd()@F + d_thermal
-        elif all(iD):
-            F = self.laminate.ABD()@(d - d_thermal)
-        else:
-            abd = self.laminate.abd()
-            aap = (abd[:, iF][iD])@F[iF]
-            noot = d[iD] - aap - d_thermal[iD]
-            F[iD] = solve(abd[:, iD][iD], noot)
-            d = abd@F + d_thermal
-        return F, d
-
-    def strain(self) -> matrix:
-        """Returns strain on ply interfaces."""
-        _, d = self.apply_load()
-        z_int = self.laminate._ply_interfaces()
-        strain = d[:3][..., None] + z_int*d[3:][..., None]
-        return strain
-
-    def stress(self, CS: str = 'ply') -> matrix:
-        """Returns stress on top and bottom for each ply.
-
-        Argument
-        --------
-        CS : str - 'ply' or 'mat' (defaults to 'ply')
-            Coordinate system to use.
-
-        Returns
-        -------
-        stress : np.ndarray(dim=2, dtype=float)
-
-            Stresses in selected coordinate system. The returned
-            matrix is of shape (2*N, 3), with N the number of plies.
-            For each ply the stress state at its top and bottom are
-            returned. For the ith ply:
-
-            - column i*2 holds the stress state at its top
-            - column i*2+1 holds the stress state at its bottom
-
-            The three rows correspond to the three in-plane stresses,
-            i.e. the two normal stresses and the shear stress.
-
-        """
-        dT = self.load.dT
-        strain = self.strain()
-        stress = np.zeros((3, 2*len(self.laminate.layup)))
-        for i, ply in enumerate(self.laminate.layup):
-            stress[:, i*2] = ply.stress(strain[:, i], dT, CS)
-            stress[:, i*2+1] = ply.stress(strain[:, i+1], dT, CS)
-        return stress
-
-    def plot_stress(self, comp: int = 0, CS: str = 'ply'):
-        """Plots stress.
-
-        Arguments
-        ---------
-        comp : int (0, 1, 2)
-            Stress component to plot:
-            - 0 : 1 or 1* component
-            - 1 : 2 or 2* component
-            - 2 : shear stress
-        CS : str - 'ply' or 'mat' (defaults to 'ply')
-            Coordinate system to use.
-
-        """
-        fig, ax = plt.subplots()
-        ax.plot(self.stress(CS)[comp], self.z_int())
-        plt.show()
-
-    def z_int(self) -> vector:
-        """Returns z-coordinates for the top and bottom surface of each ply."""
-        z = self.laminate._ply_interfaces()
-        return np.repeat(z, 2)[1:-1]
+    """
+    load = Load()
+    load.F = np.zeros(6)
+    load.F[2] = T/(2*np.pi*R**2)
+    return load
 
 
 @typechecked
@@ -661,28 +821,4 @@ def QI_layup(N: int) -> list:
 TC1200 = Material('materials/TC1200UD.json')
 layup = QI_layup(8)
 L = Laminate(layup=layup, material=TC1200, thickness=0.15E-3)
-
-load_f = [{'type': 'load', 'value': 100.0},
-          {'type': 'load', 'value': 0.0},
-          {'type': 'load', 'value': 0.0},
-          {'type': 'load', 'value': 0.0},
-          {'type': 'load', 'value': 0.0},
-          {'type': 'load', 'value': 0.0}]
-
-F = Load()
-F.load_from_dict(load_f)
-R = Result(L, F)
-
-load_d = [{'type': 'def', 'value': 1.5E-6},
-          {'type': 'def', 'value': -5E-7},
-          {'type': 'def', 'value': 0.0},
-          {'type': 'def', 'value': 0.0},
-          {'type': 'def', 'value': 0.0},
-          {'type': 'def', 'value': 0.0}]
-
-load_m = [{'type': 'load', 'value': 100},
-          {'type': 'load', 'value': 0.0},
-          {'type': 'def', 'value': 0.0},
-          {'type': 'load', 'value': 0.0},
-          {'type': 'load', 'value': 0.0},
-          {'type': 'load', 'value': 0.0}]
+F = pressure_vessel(1E6, 0.4)
