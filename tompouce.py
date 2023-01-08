@@ -8,6 +8,7 @@ from typing import Union, Optional, Callable
 import numpy.typing as npt
 from typeguard import typechecked
 import matplotlib.pyplot as plt
+from failure_criteria import Tsai_Hill
 
 
 vector = matrix = npt.NDArray[np.float_]
@@ -49,6 +50,9 @@ class Material():
     S2t : float
     S6 : float (shear strength)
 
+    Note: the compressive and shear strengths should be defined with a
+    positive sign.
+
     Methods
     =======
     load_from_dict(data)
@@ -76,6 +80,7 @@ class Material():
             In the former case, inp should be a string with the
             filename, while in the latter case inp should be a
             dictionary whose keys will be the object's attributes.
+            Check the class docstring to check for valid keys.
 
         """
         if isinstance(inp, dict):
@@ -130,7 +135,9 @@ class Material():
         stress : np.ndarray(dim=1, dtype=float)
             Stress vector in material CS.
         criterion : function(stress, Material)
-            Stress criterion to use.
+            Stress criterion to use. Should be a function that takes
+            two inputs, namely the stress state and a Material or
+            (data)class with strength data.
 
         Return
         ------
@@ -138,7 +145,7 @@ class Material():
             True if material fails.
 
         """
-        pass
+        return criterion(stress, self)
 
     def __str__(self) -> str:
         s = (f"\n{self.name}\n" +
@@ -179,27 +186,34 @@ class Ply():
     t : float
         Ply thickness.
 
-    Methods
-    =======
+    Public methods
+    ==============
     C()
         Returns stiffness matrix in ply CS.
     S()
         Returns compliance matrix in ply CS.
     alpha()
         Returns CTE vector in ply CS.
+    stress(strain, dT, CS)
+        Returns stress in ply or material CS.
+    strain(stress, dT, CS)
+        Returns strain in ply or material CS.
+    failure(stress, criterion)
+        Returns True in case ply failed.
+
+    Private methods
+    ===============
+    _T()
+        Returns transformation matrix.
+    _stress_to_matCS(stress)
+        Rotates stress from ply to material CS.
+    _strain_to_matCS(strain)
+        Rotates strain from ply to material CS.
+    _wrap_pi(theta)
+        Wrap angles between -pi/2 and pi/2
 
     """
     _R = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 2]])  # Reuter matrix
-
-    def _wrap_pi(theta: float) -> float:
-        """A clumsy function to wrap angles between -pi/2 < theta <= pi/2."""
-        theta = (theta + np.pi) % (2 * np.pi) - np.pi
-        if -np.pi/2 < theta <= np.pi/2:
-            return theta
-        elif np.pi/2 < theta <= np.pi:
-            return theta-np.pi
-        elif -np.pi <= theta <= -np.pi/2:
-            return theta+np.pi
 
     def __init__(self, material: Material, theta: float, t: float):
         """Initializes Ply instance.
@@ -218,6 +232,16 @@ class Ply():
         self.theta = Ply._wrap_pi(theta)
         self.t = t
 
+    def _wrap_pi(theta: float) -> float:
+        """A clumsy function to wrap angles between -pi/2 < theta <= pi/2."""
+        theta = (theta + np.pi) % (2 * np.pi) - np.pi
+        if -np.pi/2 < theta <= np.pi/2:
+            return theta
+        elif np.pi/2 < theta <= np.pi:
+            return theta-np.pi
+        elif -np.pi <= theta <= -np.pi/2:
+            return theta+np.pi
+
     def _T(self) -> matrix:
         """Returns transformation matrix."""
         n = np.sin(self.theta)
@@ -226,6 +250,38 @@ class Ply():
                       [n**2, m**2,    -2*n*m],
                       [-m*n,  m*n, m**2-n**2]])
         return T
+
+    def _stress_to_matCS(self, stress: vector) -> vector:
+        """Rotates stress in ply CS to material CS.
+
+        Arguments
+        ---------
+        stress : np.ndarray(dim=1, dtype=float)
+            Stress vector in ply CS.
+
+        Returns
+        -------
+        stress : np.ndarray(dim=1, dtype=float)
+            Stress vector in material CS.
+
+        """
+        return self.T() @ stress
+
+    def _strain_to_matCS(self, strain: vector) -> vector:
+        """Rotates stress in ply CS to material CS.
+
+        Arguments
+        ---------
+        strain : np.ndarray(dim=1, dtype=float)
+            Strain vector in ply CS.
+
+        Returns
+        -------
+        strain : np.ndarray(dim=1, dtype=float)
+            Strain vector in material CS.
+
+        """
+        return Ply._R @ self.T() @ inv(Ply._R) @ strain
 
     def C(self) -> matrix:
         """Returns stiffness matrix."""
@@ -263,7 +319,7 @@ class Ply():
         if CS == 'ply':
             return stress
         elif CS == 'mat':
-            return self.T() @ stress
+            return self._stress_to_matCS(stress)
         else:
             raise ValueError("expected 'ply' or 'mat' as second argument")
 
@@ -289,9 +345,29 @@ class Ply():
         if CS == 'ply':
             return strain
         elif CS == 'mat':
-            return Ply._R @ self.T() @ inv(Ply._R) @ strain
+            return self._strain_to_matCS(strain)
         else:
             raise ValueError("expected 'ply' or 'mat' as second argument")
+
+    def failure(self, stress: vector, criterion: Callable) -> bool:
+        """Check whether failure occurs for given stress and criterion.
+
+        Arguments
+        ---------
+        stress : np.ndarray(dim=1, dtype=float)
+            Stress vector in ply CS.
+        criterion : function(stress, Material)
+            Stress criterion to use. Should be a function that takes
+            two inputs, namely the stress state and a Material or
+            (data)class with strength data.
+
+        Return
+        ------
+        failure : bool
+            True if material fails.
+
+        """
+        return criterion(self.T() @ stress, self.mat)
 
     def __str__(self) -> str:
         s = f"{self.mat.name:20s} {self.t*1E3:10.2f} mm" + \
@@ -308,8 +384,8 @@ class Laminate():
     layup : list[Ply]
         List of Ply instances.
 
-    Methods
-    =======
+    Public methods
+    ==============
 
     Classical Lamination Theory
     ---------------------------
@@ -326,7 +402,22 @@ class Laminate():
 
     Load
     ----
-
+    loaddef(load)
+        Returns force and deformation vector for applied Load.
+    loaddef_thermal(load)
+        Returns thermal load and accompanying deformation vector.
+    strain(load)
+        Returns strain on ply interfaces due to load.
+    stress(load, CS)
+        Returns stresses due to load in material or ply CS.
+    plot_stress(load, component, CS, axes)
+        Plots through-thickness stress distribution.
+    print_stress(load, CS)
+        Prints stress state for all plies.
+    failure(load, criterion)
+        Checks all plies for failure.
+    print_failure(load, criterion)
+        Prints failure information.
 
     Layup manipulation
     -----------------
@@ -340,6 +431,13 @@ class Laminate():
         Split layup at i-th position and return two new Laminates.
     layup_rotate(int)
         Rotate layup with provided angle.
+
+    Private methods
+    ===============
+    _ply_interfaces()
+        Returns z-location of ply interfaces (includes outer surfaces)
+    _ply_top_bottom()
+        Returns z-location of top and bottom surface of each ply.
 
     """
 
@@ -429,13 +527,7 @@ class Laminate():
                   'Efy': 12/abd[4, 4]/H**3}
         return engcon
 
-    def _ply_interfaces(self) -> vector:
-        """Returns location of ply interfaces; includes outer surfaces."""
-        H, N = self.thickness(), len(self.layup)
-        z = np.linspace(-H/2, H/2, N+1)
-        return z
-
-    def thermal_load(self, load: Load) -> tuple[vector, vector]:
+    def loaddef_thermal(self, load: Load) -> tuple[vector, vector]:
         """Returns thermal load and accompanying deformation vector.
 
         Arguments
@@ -461,7 +553,7 @@ class Laminate():
         d_th = self.abd()@F_th
         return F_th, d_th
 
-    def apply_load(self, load: Load) -> tuple[vector, vector]:
+    def loaddef(self, load: Load) -> tuple[vector, vector]:
         """Returns force and deformation vector for applied Load.
 
         Arguments
@@ -480,7 +572,7 @@ class Laminate():
         F = load.F
         d = load.d
         iF, iD = load._masks()
-        _, d_thermal = self.thermal_load(load)
+        _, d_thermal = self.loaddef_thermal(load)
         if all(iF):
             d = self.abd()@F + d_thermal
         elif all(iD):
@@ -493,24 +585,41 @@ class Laminate():
             d = abd@F + d_thermal
         return F, d
 
-    def strain(self, load: Load) -> matrix:
-        """Returns strain on ply interfaces due to Load.
+    def strain(self, load: Load, CS: str = 'ply') -> matrix:
+        """Returns strain on top and bottom surface of each ply due to Load.
 
         Arguments
         ----------
         load : Load
             Object from Load class with information about loading conditions.
+        CS : str - 'ply' or 'mat' (defaults to 'ply')
+            Coordinate system to use.
 
         Returns
         -------
         epsilon : np.ndarray(dim=2, dtype=float)
-            Strain vector at the ply interfaces.
+            Strains in selected coordinate system. The returned
+            matrix is of shape (2*N, 3), with N the number of plies.
+            For each ply the stress state at its top and bottom are
+            returned. For the ith ply:
+
+            - column i*2 holds the stress state at its top
+            - column i*2+1 holds the stress state at its bottom
+
+            The three rows correspond to the three in-plane strains,
+            i.e. the two normal strains and the shear strain.
+        z_int : np.ndarray(dim=1, dtype=float)
+            Array with z-locations of the corresponding strains.
 
         """
-        _, d = self.apply_load(load)
-        z_int = self._ply_interfaces()
+        _, d = self.loaddef(load)
+        z_int = self._ply_top_bottom()
         strain = d[:3][..., None] + z_int*d[3:][..., None]
-        return strain
+        if CS == 'mat':
+            for i, ply in enumerate(self.layup):
+                strain[:, i*2] = ply._rotate_to_matCS(strain[:, i*2])
+                strain[:, i*2+1] = ply._rotate_to_matCS(strain[:, i*2+1])
+        return strain, z_int
 
     def stress(self, load: Load, CS: str = 'ply') -> matrix:
         """Returns stress on top and bottom for each ply due to Load.
@@ -525,7 +634,6 @@ class Laminate():
         Returns
         -------
         stress : np.ndarray(dim=2, dtype=float)
-
             Stresses in selected coordinate system. The returned
             matrix is of shape (2*N, 3), with N the number of plies.
             For each ply the stress state at its top and bottom are
@@ -536,15 +644,17 @@ class Laminate():
 
             The three rows correspond to the three in-plane stresses,
             i.e. the two normal stresses and the shear stress.
+        z_int : np.ndarray(dim=1, dtype=float)
+            Array with z-locations of the corresponding strains.
 
         """
         dT = load.dT
-        strain = self.strain(load)
+        strain, z_int = self.strain(load)
         stress = np.zeros((3, 2*len(self.layup)))
         for i, ply in enumerate(self.layup):
-            stress[:, i*2] = ply.stress(strain[:, i], dT, CS)
-            stress[:, i*2+1] = ply.stress(strain[:, i+1], dT, CS)
-        return stress
+            stress[:, i*2] = ply.stress(strain[:, i*2], dT, CS)
+            stress[:, i*2+1] = ply.stress(strain[:, i*2+1], dT, CS)
+        return stress, z_int
 
     def plot_stress(self, load: Load, comp: int = 0, CS: str = 'ply',
                     ax: Optional[plt.Axes] = None) -> plt.Axes:
@@ -572,10 +682,85 @@ class Laminate():
         """
         if ax is not None:
             fig, ax = plt.subplots()
-        ax.plot(self.stress(CS)[comp], self.z_int())
+        ax.plot(self.stress(CS)[comp], self._ply_top_bottom())
         plt.show()
 
-    def z_int(self) -> vector:
+    def print_stress(self, load: Load, CS: str = 'ply'):
+        """Prints stress state.
+
+        Arguments
+        ---------
+        load : Load
+            Object from Load class with information about loading conditions.
+        CS : str - 'ply' or 'mat' (defaults to 'ply')
+            Coordinate system to use.
+
+        """
+        stress = self.stress(CS)/1E6
+        header = f"Stresses in {CS} CS [MPa]\n" + \
+            f"{'Ply #':10s}{'Top':15s}{'Bottom':15s}\n" + \
+            "----------------------------------------\n"
+        data = ""
+        for i in range(self.number_of_plies):
+            data += f"{i:10f}{stress[0,i*2]:15.2f}{stress[0,i*2+1]:15.2f}\n"
+            data += f"{'':10f}{stress[1,i*2]:15.2f}{stress[1,i*2+1]:15.2f}\n"
+            data += f"{'':10f}{stress[2,i*2]:15.2f}{stress[2,i*2+1]:15.2f}\n"
+        return header + data
+
+    def failure(self, load: Load,
+                criterion: Callable = Tsai_Hill) -> list[bool]:
+        """Checks all plies for failure.
+
+        Arguments
+        ---------
+        load : Load
+            Object from Load class with information about loading conditios.
+        criterion : Callable
+            Failure criterion to use.
+
+        Returns
+        -------
+        failed : list of bools (True indicates failure)
+            For the ith ply:
+            - column i*2 represents its top surface
+            - column i*2+1 represents its bottom surface
+
+        """
+        stress = self.stress(load)
+        failed = []*len(stress)
+        for i, ply in enumerate(self.layup):
+            failed[i*2] = ply.failure(stress[:, i*2], criterion)
+            failed[i*2+1] = ply.failure(stress[:, i*2+1], criterion)
+        return failed
+
+    def print_failure(self, load: Load, criterion: Callable = Tsai_Hill):
+        """Prints failure information.
+
+        Arguments
+        ---------
+        load : Load
+            Object from Load class with information about loading conditios.
+        criterion : Callable
+            Failure criterion to use.
+
+        """
+        def txt(f): return "Failed" if f else "OK!"
+        failed = self.failure(load, criterion)
+        header = "Ply failure overview\n" + \
+            f"{'Ply #':10s}{'Top':15s}{'Bottom':15s}\n" + \
+            "----------------------------------------\n"
+        data = ""
+        for i in range(self.number_of_plies):
+            data += f"{i:10f}{txt(failed[i*2]):15s}{txt(failed[i*2+1]):15s}\n"
+        print(header + data)
+
+    def _ply_interfaces(self) -> vector:
+        """Returns location of ply interfaces; includes outer surfaces."""
+        H, N = self.thickness(), len(self.layup)
+        z = np.linspace(-H/2, H/2, N+1)
+        return z
+
+    def _ply_top_bottom(self) -> vector:
         """Returns z-coordinates for the top and bottom surface of each ply."""
         z = self.laminate._ply_interfaces()
         return np.repeat(z, 2)[1:-1]
@@ -630,8 +815,8 @@ class Load():
     while the corresponding element in the deformation vector d should
     then be np.nan.
 
-    Methods
-    =======
+    Public methods
+    ==============
     load_from_dict(data)
         Loads data from dictionary and sets keys as ojbect's attributes.
     load_json(fname)
@@ -640,6 +825,11 @@ class Load():
         Saves data to json file.
     valid_load()
         Returns True if load condition is valid.
+
+    Private methods
+    ===============
+    _masks()
+        Returns a mask for the non-NaNs in self.F and self.D.
 
     """
 
@@ -682,6 +872,7 @@ class Load():
         self.dT = load['dT'] if 'dT' in load else 20.0
 
     def _masks(self) -> tuple[vector]:
+        """Returns masks with 1 for every non-NaN in F and D"""
         iF = 1 * ~np.isnan(self.F)
         iD = 1 * ~np.isnan(self.d)
         return iF, iD
