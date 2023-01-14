@@ -1,4 +1,8 @@
-# Object-Oriented implementation of the CLT in Python
+# Tompouce - An object-oriented implementation of the CLT in Python
+#
+#
+#
+#
 
 from __future__ import annotations
 import numpy as np
@@ -8,7 +12,6 @@ from typing import Union, Optional, Callable
 import numpy.typing as npt
 from typeguard import typechecked
 import matplotlib.pyplot as plt
-from failure_criteria import Tsai_Hill
 
 
 vector = matrix = npt.NDArray[np.float_]
@@ -367,7 +370,7 @@ class Ply():
             True if material fails.
 
         """
-        return criterion(self.T() @ stress, self.mat)
+        return criterion(self._T() @ stress, self.mat)
 
     def __str__(self) -> str:
         s = f"{self.mat.name:20s} {self.t*1E3:10.2f} mm" + \
@@ -579,13 +582,43 @@ class Laminate():
             F = self.ABD()@(d - d_thermal)
         else:
             abd = self.abd()
-            aap = (abd[:, iF][iD])@F[iF]
-            noot = d[iD] - aap - d_thermal[iD]
-            F[iD] = solve(abd[:, iD][iD], noot)
+            abd_reduced = (abd[:, iF][iD])@F[iF]
+            d_reduced = d[iD] - abd_reduced - d_thermal[iD]
+            F[iD] = solve(abd[:, iD][iD], d_reduced)
             d = abd@F + d_thermal
         return F, d
 
-    def strain(self, load: Load, CS: str = 'ply') -> matrix:
+    def print_loaddef(self, load: Load):
+        """Prints load and deformation.
+
+        Arguments
+        ---------
+        load : Load
+            Object from Load class with information about loading conditions.
+
+        """
+        N_th, _ = self.loaddef_thermal(load)
+        N, d = self.loaddef(load)
+        header = "Deformation" + " "*31
+        header += "Load        Thermal Load\n\n"
+        s_abd = ["a a a | b b b", "b b b | d d d"]
+        s = ""
+        for i in range(3):
+            s += "{" + f"{d[i]: 3.2E}" + "}     [ " + s_abd[0] + " ]    "
+            s += "( {" + f"{N[i]: 3.2E}" + "}    {"
+            s += f"{N_th[i]: 3.2E}" + "} )\n"
+        s += "{---------}  =  [---------------]    "
+        s += "( {---------} +  {---------} )\n"
+        for i in range(3, 6):
+            s += "{" + f"{d[i]: 3.2E}" + "}     [ " + s_abd[1] + " ]    "
+            s += "( {" + f"{N[i]: 3.2E}" + "}    {"
+            s += f"{N_th[i]: 3.2E}" + "} )\n"
+        print(header + s)
+
+    def __mul__(self, load: Load):
+        return self.print_loaddef(load)
+
+    def strain(self, load: Load, CS: str = 'ply') -> tuple[matrix, vector]:
         """Returns strain on top and bottom surface of each ply due to Load.
 
         Arguments
@@ -621,7 +654,7 @@ class Laminate():
                 strain[:, i*2+1] = ply._rotate_to_matCS(strain[:, i*2+1])
         return strain, z_int
 
-    def stress(self, load: Load, CS: str = 'ply') -> matrix:
+    def stress(self, load: Load, CS: str = 'ply') -> tuple[matrix, vector]:
         """Returns stress on top and bottom for each ply due to Load.
 
         Argument
@@ -680,10 +713,13 @@ class Laminate():
             Axes for plotting.
 
         """
-        if ax is not None:
+        stress, z_int = self.stress(load, CS)
+        if not isinstance(ax, plt.Axes):
             fig, ax = plt.subplots()
-        ax.plot(self.stress(CS)[comp], self._ply_top_bottom())
-        plt.show()
+        if isinstance(ax, plt.Axes):
+            ax.plot(stress[comp], z_int)
+            plt.show()
+        return ax
 
     def print_stress(self, load: Load, CS: str = 'ply'):
         """Prints stress state.
@@ -696,19 +732,19 @@ class Laminate():
             Coordinate system to use.
 
         """
-        stress = self.stress(CS)/1E6
-        header = f"Stresses in {CS} CS [MPa]\n" + \
-            f"{'Ply #':10s}{'Top':15s}{'Bottom':15s}\n" + \
-            "----------------------------------------\n"
+        stress, _ = self.stress(load, CS)
+        sMPa = stress/1E6
+        header = f"Stresses in {CS} CS [MPa]" + "\n" + \
+            f"{'Ply #':10s}{'Top':>10s}{'Bottom':>15s}" + "\n" + \
+            "-----------------------------------\n"
         data = ""
-        for i in range(self.number_of_plies):
-            data += f"{i:10f}{stress[0,i*2]:15.2f}{stress[0,i*2+1]:15.2f}\n"
-            data += f"{'':10f}{stress[1,i*2]:15.2f}{stress[1,i*2+1]:15.2f}\n"
-            data += f"{'':10f}{stress[2,i*2]:15.2f}{stress[2,i*2+1]:15.2f}\n"
-        return header + data
+        for i in range(self.number_of_plies()):
+            data += f"{i+1:<10.0f}{sMPa[0,i*2]:10.2f}{sMPa[0,i*2+1]:15.2f}\n"
+            data += f"{'':10s}{sMPa[1,i*2]:10.2f}{sMPa[1,i*2+1]:15.2f}\n"
+            data += f"{'':10s}{sMPa[2,i*2]:10.2f}{sMPa[2,i*2+1]:15.2f}\n"
+        print(header + data)
 
-    def failure(self, load: Load,
-                criterion: Callable = Tsai_Hill) -> list[bool]:
+    def failure(self, load: Load, criterion: Callable) -> list[bool]:
         """Checks all plies for failure.
 
         Arguments
@@ -726,14 +762,14 @@ class Laminate():
             - column i*2+1 represents its bottom surface
 
         """
-        stress = self.stress(load)
-        failed = []*len(stress)
+        stress, _ = self.stress(load)
+        failed = [False]*stress.shape[1]
         for i, ply in enumerate(self.layup):
             failed[i*2] = ply.failure(stress[:, i*2], criterion)
             failed[i*2+1] = ply.failure(stress[:, i*2+1], criterion)
         return failed
 
-    def print_failure(self, load: Load, criterion: Callable = Tsai_Hill):
+    def print_failure(self, load: Load, criterion: Callable):
         """Prints failure information.
 
         Arguments
@@ -750,8 +786,9 @@ class Laminate():
             f"{'Ply #':10s}{'Top':15s}{'Bottom':15s}\n" + \
             "----------------------------------------\n"
         data = ""
-        for i in range(self.number_of_plies):
-            data += f"{i:10f}{txt(failed[i*2]):15s}{txt(failed[i*2+1]):15s}\n"
+        for i in range(self.number_of_plies()):
+            data += f"{i+1:<10.0f}"
+            data += f"{txt(failed[i*2]):<15s}{txt(failed[i*2+1]):<15s}\n"
         print(header + data)
 
     def _ply_interfaces(self) -> vector:
@@ -762,7 +799,7 @@ class Laminate():
 
     def _ply_top_bottom(self) -> vector:
         """Returns z-coordinates for the top and bottom surface of each ply."""
-        z = self.laminate._ply_interfaces()
+        z = self._ply_interfaces()
         return np.repeat(z, 2)[1:-1]
 
     def __str__(self) -> str:
@@ -836,12 +873,28 @@ class Load():
     _labels = [('Fx', 'ex'), ('Fy', 'ey'), ('Fxy', 'exy'),
                ('Mx', 'kx'), ('My', 'ky'), ('Mxy', 'kxy')]
 
-    def __init__(self):
+    def __init__(self, inp: Optional[Union[str, dict]] = None):
+        """Initializes Load object.
+
+        Parameters
+        ----------
+        inp : str or dict (optional)
+            Data is read either from a json file or from a dictionary.
+            In the former case, inp should be a string with the
+            filename, while in the latter case inp should be a
+            dictionary. Check the class docstring of load_from_dict to
+            check for valid keys.
+
+        """
         self.F = np.nan * np.ones(6)
         self.d = np.nan * np.ones(6)
         self.dT = 0.0
+        if isinstance(inp, dict):
+            self.load_from_dict(inp)
+        if isinstance(inp, str):
+            self.load_json(inp)
 
-    def load_from_dict(self, load):
+    def load_from_dict(self, load: dict):
         """Load data from dictionary.
 
         Argument
@@ -859,22 +912,22 @@ class Load():
 
         """
         for i, label in enumerate(Load._labels):
-            if label[0] in load & label[1] in load:
-                self.F[0] = load[label[0]]
-            elif label[0] not in load & label[1] in load:
-                self.d[0] = load[label[1]]
-            elif label[0] in load & label[1] in load:
+            if label[0] in load and label[1] not in load:
+                self.F[i] = load[label[0]]
+            elif label[0] not in load and label[1] in load:
+                self.d[i] = load[label[1]]
+            elif label[0] in load and label[1] in load:
                 raise KeyError("overdefined problem:" +
                                f" both {label[0]} and {label[1]} provided")
-            elif label[0] not in load & label[1] not in load:
+            elif label[0] not in load and label[1] not in load:
                 raise KeyError("underdefined problem:" +
                                f" no {label[0]} or {label[1]} provided")
         self.dT = load['dT'] if 'dT' in load else 20.0
 
     def _masks(self) -> tuple[vector]:
-        """Returns masks with 1 for every non-NaN in F and D"""
-        iF = 1 * ~np.isnan(self.F)
-        iD = 1 * ~np.isnan(self.d)
+        """Returns masks with True for every non-NaN in F and D"""
+        iF = ~np.isnan(self.F)
+        iD = ~np.isnan(self.d)
         return iF, iD
 
     def save_json(self, fname):
@@ -1007,9 +1060,3 @@ def QI_layup(N: int) -> list:
     else:
         raise ValueError("The number of plies should be a multiple of 8.")
     return layup
-
-
-TC1200 = Material('materials/TC1200UD.json')
-layup = QI_layup(8)
-L = Laminate(layup=layup, material=TC1200, thickness=0.15E-3)
-F = pressure_vessel(1E6, 0.4)

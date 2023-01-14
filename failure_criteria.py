@@ -36,7 +36,7 @@ So far, the following failure criteria have been implemented:
 import numpy as np
 import numpy.typing as npt
 from typeguard import typechecked
-from tompouse import Material
+from tompouce import Material
 
 
 vector = matrix = npt.NDArray[np.float_]
