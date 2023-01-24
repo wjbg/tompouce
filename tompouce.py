@@ -86,6 +86,12 @@ class Material():
             Check the class docstring to check for valid keys.
 
         """
+        self.type = "Material"
+        self.name = ""
+        self.manufacturer = ""
+        self.matrix = ""
+        self.fiber = ""
+        self.S1c = self.S1t = self.S2c = self.S2t = self.S6 = 0
         if isinstance(inp, dict):
             self.load_from_dict(inp)
         if isinstance(inp, str):
@@ -108,7 +114,6 @@ class Material():
     def save_json(self, fname: str):
         """Saves data to json file."""
         data = vars(self)
-        data['type'] = 'Material'
         with open(fname, 'w') as f:
             json.dump(data, f, sort_keys=True, indent=4)
 
@@ -155,7 +160,7 @@ class Material():
              "-----------------------------\n" +
              f"Manufacturer:   {self.manufacturer}\n" +
              f"Matrix:         {self.matrix}\n" +
-             f"Fiber:          {self.matrix}\n" +
+             f"Fiber:          {self.fiber}\n" +
              "\n" +
              "Thermoelastic properties\n" +
              "-----------------------------\n" +
@@ -268,7 +273,7 @@ class Ply():
             Stress vector in material CS.
 
         """
-        return self.T() @ stress
+        return self._T() @ stress
 
     def _strain_to_matCS(self, strain: vector) -> vector:
         """Rotates stress in ply CS to material CS.
@@ -482,7 +487,7 @@ class Laminate():
     def layup_insert(self, ply: Ply, i: int):
         """Inserts a Ply object at the i-th position in the layup."""
         if isinstance(ply, Ply):
-            self.layup.insert(i)
+            self.layup.insert(i, ply)
         else:
             raise TypeError("expected a Ply object")
 
@@ -717,7 +722,13 @@ class Laminate():
         if not isinstance(ax, plt.Axes):
             fig, ax = plt.subplots()
         if isinstance(ax, plt.Axes):
-            ax.plot(stress[comp], z_int)
+            label = {'mat': ["1", "2", "6"],
+                     'ply': ["1*", "2*", "6*"]}
+            ax.plot(stress[comp]/1E6, z_int*1E3, label=label[CS][comp])
+            ax.invert_yaxis()
+            ax.set_xlabel("Stress [MPa]")
+            ax.set_ylabel("Z-coordinate [mm]")
+            ax.legend()
             plt.show()
         return ax
 
@@ -794,7 +805,10 @@ class Laminate():
     def _ply_interfaces(self) -> vector:
         """Returns location of ply interfaces; includes outer surfaces."""
         H, N = self.thickness(), len(self.layup)
-        z = np.linspace(-H/2, H/2, N+1)
+        z = np.zeros(N+1)
+        z[0] = -H/2
+        for i, ply in enumerate(self.layup):
+            z[i+1] = z[i] + ply.t
         return z
 
     def _ply_top_bottom(self) -> vector:
@@ -985,7 +999,7 @@ def pressure_vessel(P: float, R: float) -> Load:
     load = Load()
     load.F = np.zeros(6)
     load.F[0] = P*R/2
-    load.F[1] = R*R
+    load.F[1] = P*R
     return load
 
 
