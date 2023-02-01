@@ -31,5 +31,5 @@ print("Resulting deformations\n----------------------")
 for load, radius in zip(loads, radii):
     _, d = bias_laminate.loaddef(load)
     angle = d[2]*length/radius
-    print(f"Radius: {radius*1E3:3.0f} mm")
-    print(f"Angle: {rad2deg(angle):3.1f} deg.\n")
+    print(f"Radius: {radius*1E3:4.0f} mm")
+    print(f"Angle: {rad2deg(angle):4.2f} deg.\n")

@@ -1,17 +1,15 @@
-# Example: Flexural rigidity of a sandwich beam
+# Example: Quasi-isotropy
 #
-# Calculate the flexural rigidity of sandwhich beams. All beams have a
-# width of 2 cm. Three different face sheet thicknesses are used,
-# namely 0.25, 0.5 and 1.0 mm, while the core thickness is veried
-# between 1 and 20 mm.
+# Calculate the modulus of a quasi-isotropic and cross-ply laminate as
+# a function of in-plane orientation angle.
 #
 import sys; sys.path.append('../')
 from tompouce import Material, Laminate, QI_layup, CP_layup
 import numpy as np
 import matplotlib.pyplot as plt
 
-# List of cutting angles
-theta = np.linspace(0, 2*np.pi, 50)
+# List of orientation angles
+theta = np.linspace(0, 2*np.pi, 200)
 
 # The skin material properties are imported from a json file
 TC1200 = Material('../materials/TC1200_UD.json')
@@ -22,7 +20,7 @@ QI_laminate = Laminate(QI_layup(24), TC1200, ply_thickness)
 CP_laminate = Laminate(CP_layup(24), TC1200, ply_thickness)
 
 # Calculate results
-modulus = np.zeros((2, len(core_thickness)))
+modulus = np.zeros((2, len(theta)))
 modulus[0, 0] = QI_laminate.engineering_constants()['Ex']
 modulus[1, 0] = CP_laminate.engineering_constants()['Ex']
 
@@ -35,8 +33,11 @@ for i in range(1, len(theta)):
 
 # Plot results
 with plt.style.context('ggplot'):
-    fig, ax = plt.subplots(figsize=(4.5, 3))
-    ax.plot(theta, modulus[0], label="Quasi-Isotropic")
-    ax.plot(theta, modulus[1], label="Cross-Ply")
-    ax.legend()
+    fig, ax = plt.subplots(figsize=(4.5, 3),
+                           subplot_kw={'projection': 'polar'})
+    ax.plot(theta, modulus[0]/1E9, label="Quasi-Isotropic")
+    ax.plot(theta, modulus[1]/1E9, label="Cross-Ply")
+    ax.legend(bbox_to_anchor=(1, 1), bbox_transform=fig.transFigure)
+    ax.set_title("Tensile modulus [GPa]", fontsize=10)
     fig.tight_layout()
+    plt.savefig('../img/quasi_isotropy.png', bbox_inches='tight')

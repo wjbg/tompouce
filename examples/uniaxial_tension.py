@@ -1,7 +1,7 @@
 # Example: 24-ply QI laminate subjected to uniaxial load
 #
 # A quasi-isotropic fiber reinforced composite test specimen with a
-# width of 25 mm is subjected to a tensile test. We will:
+# width of 25 mm that is subjected to a tensile test. We will:
 #
 # 1. Determine the Young's modulus in X-direction
 # 2. Check for failure in case a load of 50 kN is applied
@@ -67,7 +67,7 @@ uniaxial_tension = Load(loading_conditions)
 # applied load.
 F, d = QI_laminate.loaddef(uniaxial_tension)
 
-# Laternatively, we can also print this informatio in a pretty way:
+# Alternatively, we can also print this information in a pretty way:
 QI_laminate*uniaxial_tension
 
 # We can also plot the stress distribution in the laminate. Here, we

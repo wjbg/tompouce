@@ -1,6 +1,6 @@
 # Example: Flexural rigidity of a sandwich beam
 #
-# Calculate the flexural rigidity of sandwhich beams. All beams have a
+# Calculate the flexural rigidity of sandwich beams. All beams have a
 # width of 2 cm. Three different face sheet thicknesses are used,
 # namely 0.25, 0.5 and 1.0 mm, while the core thickness is veried
 # between 1 and 20 mm.
@@ -50,3 +50,4 @@ with plt.style.context('ggplot'):
     ax.set_xlabel('core thickness [mm]', fontsize=10)
     ax.set_ylabel('flexural rigidity [Nm$^2$]', fontsize=10)
     fig.tight_layout()
+    plt.savefig('../img/sandwich.png', bbox_inches='tight')
