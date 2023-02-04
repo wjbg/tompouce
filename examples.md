@@ -1,6 +1,7 @@
 # Tompouce example gallery
 
-Here you can find a few examples to demonstrate how Tompouce works.
+Below you can find a few examples to demonstrate how Tompouce works.
+The accompanying Python files can be found in the `examples` folder.
 The first two examples are quite verbose to provide a bit of context.
 Specifically, the following examples can be found below:
 - [Uniaxial tensile test](#uniaxial-tensile-test)
