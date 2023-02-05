@@ -3,7 +3,7 @@
 Set of functions with failure criteria for composite lamina. The
 functions take (at least) two arguments:
 
-1. The in-plane stress state which should be a NDarray of length 3
+1. The in-plane stress state which should be an NDarray of length 3
    with the longitudinal and the transverse normal stresses and the
    in-plane shear stress.
 2. An instance of the Material class or any other class with the
@@ -14,7 +14,8 @@ functions take (at least) two arguments:
    - S2t : Transverse tensile strength
    - S2c : Transverse compressive strength
    - S6  : Shear strength
-   Some criteria may require different or additional strength data.
+   Some failure criteria may require different or additional strength
+   data.
 
 All functions provide a boolean as output with True in case the lamina
 failed and False in case the lamina did not fail.
@@ -45,6 +46,23 @@ vector = matrix = npt.NDArray[np.float_]
 @typechecked
 def Tsai_Hill(stress: vector, mat: Material) -> bool:
     """Checks if stress causes failure according to Tsai-Hill criterion.
+
+    Failure occurs if:
+
+    $$
+     \frac{\sigma_1^2}{S_{1\cdot}^2} -
+     \frac{\sigma_1\sigma_2}{S_{1\cdot}^2} +
+     \frac{\sigma_2^2}{S_{2\cdot}^2} +
+     \frac{\sigma_6^2}{S_{6\cdot}^2} > 1$,
+    $$
+
+    with: $\sigma$ the stress state and $S$ the strength data. The
+    strengths used are:
+
+    $S_{1\cdot} = S_{1c}$ if $\sigma_1 < 0$ else $S_{1t}$,
+    $S_{2\cdot} = S_{2c}$ if $\sigma_2 < 0$ else $S_{2t}$,
+
+    with the subscript indicating (c)ompressive or (t)ensile strength.
 
     Arguments
     ---------
@@ -80,6 +98,23 @@ def Tsai_Hill(stress: vector, mat: Material) -> bool:
 def Norris(stress: vector, mat: Material) -> bool:
     """Checks if stress causes failure according to Norris criterion.
 
+    Failure occurs if:
+
+    $$
+     \frac{\sigma_1^2}{S_{1\cdot}^2} -
+     \frac{\sigma_1}{S_{1\dtot}}\frac{\sigma_2}{S_{2\cdot}} +
+     \frac{\sigma_2^2}{S_{2\cdot}^2} +
+     \frac{\sigma_6^2}{S_{6\cdot}^2} > 1$,
+    $$
+
+    with: $\sigma$ the stress state and $S$ the strength data. The
+    strengths used are:
+
+    $S_{1\cdot} = S_{1c}$ if $\sigma_1 < 0$ else $S_{1t}$,
+    $S_{2\cdot} = S_{2c}$ if $\sigma_2 < 0$ else $S_{2t}$,
+
+    with the subscript indicating (c)ompressive or (t)ensile strength.
+
     Arguments
     ---------
     stress : NDArray(dtype=float, dim=1)
@@ -113,6 +148,25 @@ def Norris(stress: vector, mat: Material) -> bool:
 @typechecked
 def Tsai_Wu(stress: vector, mat: Material) -> bool:
     """Checks if stress causes failure according to Tsai-Wu criterion.
+
+    Failure occurs if:
+
+    $$
+     F_1\sigma_1 + F_2\sigma_2 + 2F_{12}\sigma_1\sigma_2 +
+     F_{11}\sigma_1^2 + F_{22}\sigma_2^2 + F_{66}\sigma_6^2 > 1
+    $$
+
+    with: $\sigma$ the stress state and $S$ the strength data. The
+    F factors are defined as:
+
+    $F_1 = 1/S_{1t} - 1/S_{1c}$
+    $F_2 = 1/S_{2t} - 1/S_{2c}$
+    $F_{11} = 1/(S_{1t}S_{1c})$
+    $F_{22} = 1/(S_{2t}S_{2c})$
+    $F_{11} = -\sqrt{F_{11} + F_{22}}/2
+    $F_{66} = 1/S_{6}^2$
+
+    with the subscript indicating (c)ompressive or (t)ensile strength.
 
     Arguments
     ---------
