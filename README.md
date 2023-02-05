@@ -24,7 +24,7 @@ length = 1.25
 radius = 50E-3
 torque = 500.0
 
-# Create a Material object created using data from a json file
+# Create a Material object using data from a json file
 TC1200 = Material('materials/TC1200_UD.json')
 
 # Create a Laminate object
