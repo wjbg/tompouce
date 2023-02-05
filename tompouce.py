@@ -725,7 +725,6 @@ class Laminate():
             ax.set_xlabel("Stress [MPa]")
             ax.set_ylabel("Z-coordinate [mm]")
             ax.legend()
-            plt.show()
         return ax
 
     def print_stress(self, load: Load, CS: str = 'ply'):
