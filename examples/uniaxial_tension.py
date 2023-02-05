@@ -9,6 +9,7 @@
 import sys; sys.path.append('../')
 from tompouce import Material, Laminate, Load, QI_layup
 from failure_criteria import Tsai_Hill
+import matplotlib.pyplot as plt
 
 # First, we will need an instance of the Material class, which holds
 # all relevant material properties. There are two ways to create a
@@ -72,7 +73,15 @@ QI_laminate*uniaxial_tension
 
 # We can also plot the stress distribution in the laminate. Here, we
 # plot the 1st normal stress in ply CS.
-QI_laminate.plot_stress(uniaxial_tension, comp=0, CS='ply')
+with plt.style.context('ggplot'):
+    fig, ax = plt.subplots(figsize=(4.5, 3))
+    QI_laminate.plot_stress(uniaxial_tension, comp=0, CS='ply', ax=ax)
+    ax.set_xlabel("Stress [MPa]", fontsize=10)
+    ax.set_ylabel("Z-location [mm]", fontsize=10)
+    ax.set_title("Stress in 1* direction", fontsize=10)
+    ax.get_legend().remove()
+    fig.tight_layout()
+    plt.savefig('../img/uniaxial.png', bbox_inches='tight')
 
 # Lastly, we can check for 1st ply failure according to specified
 # failure criterion.

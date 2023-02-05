@@ -40,6 +40,9 @@ thermal_load = Load(loading_conditions)
 
 # The resulting deformations can be calculated as:
 _, d = CP_laminate.loaddef(thermal_load)
+print(f"Curvature (x-direction): {d[3]:.2f} -/m")
+print(f"Curvature (y-direction): {d[4]:.2f} -/m")
+print(f"Twisting curvature: {d[5]:.2f} -/m")
 
 # The bending moments to flatten the laminate can be easily computed
 # as well. As a first step we define a new loading condition, where we
@@ -50,4 +53,6 @@ combined_load = Load(loading_conditions)
 
 # The required bending moments can be extracted from the force vector.
 force, _ = CP_laminate.loaddef(combined_load)
-moments = force[3:]
+print(f"Required moment (x-direction): {force[3]:.2f} Nm/m")
+print(f"Required moment (y-direction): {force[4]:.2f} Nm/m")
+print(f"Required twisting moment: {force[5]:.2f} Nm/m")

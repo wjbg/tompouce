@@ -14,8 +14,7 @@ Specifically, the following examples can be found below:
 ## Uniaxial tensile test
 
 Consider a quasi-isotropic fiber reinforced composite test specimen
-with a width of 25 mm is that subjected to a tensile test. We will
-now:
+with a width of 25 mm that is subjected to a tensile test. We will:
 - Determine the Young's modulus in X-direction
 - Check for failure in case a load of 50 kN is applied
 
@@ -24,54 +23,129 @@ from tompouce import Material, Laminate, Load, QI_layup
 from failure_criteria import Tsai_Hill
 ```
 
-First, we will need an instance of the Material class, which holds all
+First, we create an instance of the Material class, which holds all
 relevant material properties. There are two ways to create a Material
 object. We can:
-- Import data from a json file
-- Provide a dictionary with the relevant data
+- import data from a json file, or
+- provide a dictionary with the relevant data.
 
-Here, we will import data from a json file.
+Here, we will import data from a json file:
 
 ```python
 TC1200 = Material('../materials/TC1200_UD.json')
+```
 
-# We can print the object to learn about the material properties
+We can print the object to learn about the material properties:
+
+```python
 print(TC1200)
 ```
 
-Next we need to create a Laminate object. Again, there are two ways to
-do so. We can:
-- Provide a list of ply instances, which is demonstrated in the next
-  example
-- Provide a Material object, a list with fiber orientation angles, and
+which prints:
+
+```
+TC1200 UD
+-----------------------------
+Manufacturer:   Toray AC
+Matrix:         PEEK
+Fiber:          Carbon - Intermediate Modulus
+
+Thermoelastic properties
+-----------------------------
+E1:               135.0 GPa
+E2:                10.0 GPa
+G12:                5.2 GPa
+v12:               0.28
+alpha1:            0.40 um/m
+alpha2:           30.00 um/m
+
+Strength
+-----------------------------
+S1t:             2410.0 MPa
+S1c:             1300.0 MPa
+S2t:               86.0 MPa
+S2c:              100.0 MPa
+S6:               152.0 MPa
+```
+
+Next we create a Laminate object. Again, there are two ways to do so.
+We can:
+- provide a list of ply instances, which is demonstrated in the next
+  example, or
+- provide a Material object, a list with fiber orientation angles, and
   a ply thickness (equal for all plies).
 
-Here we use the second option, making use of the function `QI_layup()`
-to generate the orientation angles for a quasi-isotropic layup.
+Here we follow the seciond approach, making use of the function
+`QI_layup()` to generate the orientation angles for a quasi-isotropic
+layup:
 
 ```python
 ply_thickness = 0.15E-3
 layup = QI_layup(24)
 QI_laminate = Laminate(layup, TC1200, ply_thickness)
+```
 
-# In case we would like information about our Laminate objects, such
-# as the Young's modulus, we can again simply use the print statement:
+In case we would like information about our Laminate objects, such as
+the elastic properties, we can again simply use the print statement:
+
+```python
 print(QI_laminate)
+```
+
+```
+Material                 Thickness   Orientation
+------------------------------------------------ Top
+TC1200 UD                  0.15 mm      45.0 deg
+TC1200 UD                  0.15 mm       0.0 deg
+TC1200 UD                  0.15 mm     -45.0 deg
+TC1200 UD                  0.15 mm      90.0 deg
+TC1200 UD                  0.15 mm      45.0 deg
+TC1200 UD                  0.15 mm       0.0 deg
+TC1200 UD                  0.15 mm     -45.0 deg
+TC1200 UD                  0.15 mm      90.0 deg
+TC1200 UD                  0.15 mm      45.0 deg
+TC1200 UD                  0.15 mm       0.0 deg
+TC1200 UD                  0.15 mm     -45.0 deg
+TC1200 UD                  0.15 mm      90.0 deg
+TC1200 UD                  0.15 mm      90.0 deg
+TC1200 UD                  0.15 mm     -45.0 deg
+TC1200 UD                  0.15 mm       0.0 deg
+TC1200 UD                  0.15 mm      45.0 deg
+TC1200 UD                  0.15 mm      90.0 deg
+TC1200 UD                  0.15 mm     -45.0 deg
+TC1200 UD                  0.15 mm       0.0 deg
+TC1200 UD                  0.15 mm      45.0 deg
+TC1200 UD                  0.15 mm      90.0 deg
+TC1200 UD                  0.15 mm     -45.0 deg
+TC1200 UD                  0.15 mm       0.0 deg
+TC1200 UD                  0.15 mm      45.0 deg
+------------------------------------------------ Bottom
+# plies: 24                3.60 mm
+
+Engineering constants
+---------------------
+Young's Modulus X:   52.6 GPa
+Young's Modulus Y:   52.6 GPa
+Shear Modulus X:     20.1 GPa
+Poisson's ratio XY:  0.31
+Poisson's ratio YX:  0.31
+Flexural modulus X:  55.2 GPa
+Flexural modulus Y:  42.5 GPa
 ```
 
 Next, a Load object is needed. There are two ways to create such an
 object. We can:
-- Import data from a json file
-- Provide a dictionary with the relevant data
+- import data from a json file, or
+- provide a dictionary with the relevant data.
 
 Here, we will create a Load object from a dictionary. The dictionary
 should have the following keys:
-- Fx OR ex      : normal load or strain in x-direction
-- Fy OR ey      : normal load or strain in y-direction
-- Fxy OR exy    : shear load or shear strain
-- Mx OR kx      : bending moment or curvature in x-direction
-- My OR ky      : bending moment or curvature in y-direction
-- Mxy OR kxy    : twisting moment or curvature
+- Fx OR ex      : normal load OR strain in x-direction
+- Fy OR ey      : normal load OR strain in y-direction
+- Fxy OR exy    : shear load OR shear strain
+- Mx OR kx      : bending moment OR curvature in x-direction
+- My OR ky      : bending moment OR curvature in y-direction
+- Mxy OR kxy    : twisting moment OR curvature
 - dT (optional) : temperature difference
 
 ```python
@@ -87,9 +161,24 @@ applied load.
 
 ```python
 F, d = QI_laminate.loaddef(uniaxial_tension)
+```
 
-# Alternatively, we can also print this information in a pretty way:
+Alternatively, we can also print this information in a pretty way:
+
+```python
 QI_laminate*uniaxial_tension
+```
+
+```
+Deformation                               Load        Thermal Load
+
+{ 1.06E-02}     [ a a a | b b b ]    ( { 2.00E+06}    { 0.00E+00} )
+{-3.23E-03}     [ a a a | b b b ]    ( { 0.00E+00}    { 0.00E+00} )
+{ 4.38E-19}     [ a a a | b b b ]    ( { 0.00E+00}    { 0.00E+00} )
+{---------}  =  [---------------]    ( {---------} +  {---------} )
+{ 8.10E-16}     [ b b b | d d d ]    ( { 0.00E+00}    { 0.00E+00} )
+{-1.96E-17}     [ b b b | d d d ]    ( { 0.00E+00}    { 0.00E+00} )
+{-4.22E-16}     [ b b b | d d d ]    ( { 0.00E+00}    { 0.00E+00} )
 ```
 
 We can also plot the stress distribution in the laminate. Here, we
@@ -98,6 +187,10 @@ plot the 1st normal stress in ply CS.
 QI_laminate.plot_stress(uniaxial_tension, comp=0, CS='ply')
 ```
 
+<p align="left">
+	<img src="./img/uniaxial.png" width="350">
+</p>
+
 Lastly, we can check for 1st ply failure according to specified
 failure criterion.
 
@@ -105,13 +198,42 @@ failure criterion.
 QI_laminate.print_failure(uniaxial_tension, Tsai_Hill)
 ```
 
+```
+Ply failure overview
+Ply #     Top            Bottom
+-------------------------------
+1         OK!            OK!
+2         OK!            OK!
+3         OK!            OK!
+4         Failed         Failed
+5         OK!            OK!
+6         OK!            OK!
+7         OK!            OK!
+8         Failed         Failed
+9         OK!            OK!
+10        OK!            OK!
+11        OK!            OK!
+12        Failed         Failed
+13        Failed         Failed
+14        OK!            OK!
+15        OK!            OK!
+16        OK!            OK!
+17        Failed         Failed
+18        OK!            OK!
+19        OK!            OK!
+20        OK!            OK!
+21        Failed         Failed
+22        OK!            OK!
+23        OK!            OK!
+24        OK!            OK!
+```
+
 ## Thermal load
 
 A non-symmetric laminate is subjected to a temperature change. We will
 use Tompouce to:
-
-- Calculate the resulting curvature
-- The bending moment required to flatten the laminate
+- calculate the resulting curvature, and
+- the bending moment required to flatten the laminate.
 
 ```python
 from tompouce import Material, Ply, Laminate, Load
@@ -156,6 +278,15 @@ The resulting deformations can be calculated as:
 
 ```python
 _, d = CP_laminate.loaddef(thermal_load)
+print(f"Curvature (x-direction): {d[3]:.2f} -/m")
+print(f"Curvature (y-direction): {d[4]:.2f} -/m")
+print(f"Twisting curvature: {d[5]:.2f} -/m")
+```
+
+```
+Curvature (x-direction): -3.98 -/m
+Curvature (y-direction): 3.98 -/m
+Twisting curvature: 0.00 -/m
 ```
 
 The bending moments to flatten the laminate can be easily computed as
@@ -166,19 +297,27 @@ force the curvatures equal to zero.
 loading_conditions = {'Fx': 0.0, 'Fy': 0.0, 'Fxy': 0.0,
                       'kx': 0.0, 'ky': 0.0, 'kxy': 0.0, 'dT': -130.0}
 combined_load = Load(loading_conditions)
-```python
+```
 
 The required bending moments can be extracted from the force vector.
 
 ```python
 force, _ = CP_laminate.loaddef(combined_load)
-moments = force[3:]
+print(f"Required moment (x-direction): {force[3]:.2f} Nm/m")
+print(f"Required moment (y-direction): {force[4]:.2f} Nm/m")
+print(f"Required twisting moment: {force[5]:.2f} Nm/m")
+```
+
+```
+Required moment (x-direction): 6.10 Nm/m
+Required moment (y-direction): -6.10 Nm/m
+Required twisting moment: -0.00 Nm/m
 ```
 
 ## Quasi-isotropy
 
 We will now calculate the modulus of a quasi-isotropic and cross-ply
-laminate as a function of in-plane orientation angle.
+laminate as a function of the in-plane orientation angle.
 
 ```python
 from tompouce import Material, Laminate, QI_layup, CP_layup
@@ -340,6 +479,21 @@ for load, radius in zip(loads, radii):
     print(f"Angle: {rad2deg(angle):4.2f} deg.\n")
 ```
 
+This provides the following output:
+
+```
+Resulting deformations
+----------------------
+Radius:   25 mm
+Angle: 3.47 deg.
+
+Radius:   50 mm
+Angle: 0.43 deg.
+
+Radius:   75 mm
+Angle: 0.13 deg.
+```
+
 ## Pressure vessel
 
 Consider a pressure vessel with a radius of 0.3 mm, which has to
@@ -389,4 +543,17 @@ for angle, vessel in zip(fiber_angles, vessels):
         print(f"Vessel with fiber angle of {np.rad2deg(angle):3.1f} failed.")
     else:
         print(f"Vessel with fiber angle of {np.rad2deg(angle):3.1f} survived.")
+```
+
+Which shows the following output:
+
+```
+Failure analysis pressure vessels
+---------------------------------
+
+Vessel with fiber angle of 35.0 failed.
+Vessel with fiber angle of 45.0 failed.
+Vessel with fiber angle of 55.0 survived.
+Vessel with fiber angle of 65.0 failed.
+Vessel with fiber angle of 75.0 failed.
 ```
