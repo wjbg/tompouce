@@ -1,1 +1,3 @@
 *~
+.gitignore
+.dir-locals.el
