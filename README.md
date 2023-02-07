@@ -29,7 +29,7 @@ TC1200 = Material('materials/TC1200_UD.json')
 
 # Create a Laminate object
 ply_thickness = 0.5E-3
-layup = [45.0, -45.0, 45.0, -45.0]
+layup = [45.0, -45.0, -45.0, 45.0]
 shaft = Laminate(deg2rad(layup), TC1200, ply_thickness)
 
 # Create a Load object
@@ -46,10 +46,10 @@ Deformation                               Load        Thermal Load
 
 { 0.00E+00}     [ a a a | b b b ]    ( { 0.00E+00}    { 0.00E+00} )
 { 0.00E+00}     [ a a a | b b b ]    ( { 0.00E+00}    { 0.00E+00} )
-{ 5.28E-04}     [ a a a | b b b ]    ( { 3.18E+04}    { 0.00E+00} )
+{ 4.54E-04}     [ a a a | b b b ]    ( { 3.18E+04}    { 0.00E+00} )
 {---------}  =  [---------------]    ( {---------} +  {---------} )
-{ 1.64E-01}     [ b b b | d d d ]    ( { 0.00E+00}    { 0.00E+00} )
-{ 1.64E-01}     [ b b b | d d d ]    ( { 0.00E+00}    { 0.00E+00} )
+{ 0.00E+00}     [ b b b | d d d ]    ( { 0.00E+00}    { 0.00E+00} )
+{ 0.00E+00}     [ b b b | d d d ]    ( { 0.00E+00}    { 0.00E+00} )
 { 0.00E+00}     [ b b b | d d d ]    ( { 0.00E+00}    { 0.00E+00} )
 ```
 
@@ -64,7 +64,7 @@ print(f"The angular deformation of the shaft is {rad2deg(angle):.2f} degrees.")
 ```
 
 ```
-The angular deformation of the shaft is 0.76 degrees.
+The angular deformation of the shaft is 0.65 degrees.
 ```
 
 [Here](examples.md) you can find a small example gallery, which should
