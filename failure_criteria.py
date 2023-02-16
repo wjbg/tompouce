@@ -53,7 +53,7 @@ def Tsai_Hill(stress: vector, mat: Material) -> bool:
      \frac{\sigma_1^2}{S_{1\cdot}^2} -
      \frac{\sigma_1\sigma_2}{S_{1\cdot}^2} +
      \frac{\sigma_2^2}{S_{2\cdot}^2} +
-     \frac{\sigma_6^2}{S_{6\cdot}^2} > 1$,
+     \frac{\sigma_6^2}{S_{6\cdot}^2} > 1,
     $$
 
     with: $\sigma$ the stress state and $S$ the strength data. The
@@ -104,7 +104,7 @@ def Norris(stress: vector, mat: Material) -> bool:
      \frac{\sigma_1^2}{S_{1\cdot}^2} -
      \frac{\sigma_1}{S_{1\dtot}}\frac{\sigma_2}{S_{2\cdot}} +
      \frac{\sigma_2^2}{S_{2\cdot}^2} +
-     \frac{\sigma_6^2}{S_{6\cdot}^2} > 1$,
+     \frac{\sigma_6^2}{S_{6\cdot}^2} > 1,
     $$
 
     with: $\sigma$ the stress state and $S$ the strength data. The
@@ -205,6 +205,25 @@ def Tsai_Wu(stress: vector, mat: Material) -> bool:
 def Hoffman(stress: vector, mat: Material) -> bool:
     """Checks if stress causes failure according to Hoffman criterion.
 
+    Failure occurs if:
+
+    $$
+     F_1\sigma_1 + F_2\sigma_2 + 2F_{12}\sigma_1\sigma_2 +
+     F_{11}\sigma_1^2 + F_{22}\sigma_2^2 + F_{66}\sigma_6^2 > 1
+    $$
+
+    with: $\sigma$ the stress state and $S$ the strength data. The
+    F factors are defined as:
+
+    $F_1 = 1/S_{1t} - 1/S_{1c}$
+    $F_2 = 1/S_{2t} - 1/S_{2c}$
+    $F_{11} = 1/(S_{1t}S_{1c})$
+    $F_{22} = 1/(S_{2t}S_{2c})$
+    $F_{12} = 1/(S_{1t}S_{1c})$
+    $F_{66} = 1/S_{6}^2$
+
+    with the subscript indicating (c)ompressive or (t)ensile strength.
+
     Arguments
     ---------
     stress : NDArray(dtype=float, dim=1)
@@ -242,6 +261,12 @@ def Hoffman(stress: vector, mat: Material) -> bool:
 def Hashin_Rotem(stress: vector, mat: Material) -> bool:
     """Checks if stress causes failure according to Hashin-Rotem criterion.
 
+    Failure occurs if:
+
+    $S_{1c}^2 \leq\sigma_1^2 \geq S_{1t}^2$
+
+    $S_{2c}^2 \leq\sigma_2^2 \geq S_{2t}^2$
+
     Arguments
     ---------
     stress : NDArray(dtype=float, dim=1)
@@ -278,6 +303,21 @@ def Hashin_Rotem(stress: vector, mat: Material) -> bool:
 @typechecked
 def Hashin(stress: vector, mat: Material, alpha: float = 1.0) -> bool:
     """Checks if stress causes failure according to Hashin criterion.
+
+    Failure occurs if any of the following terms is greater than 1.0:
+
+    $$F_f^{t} = \left(\frac{\sigma_1}{S_{1t}}\right)^2 +
+      \alpha\left(\frac{\sigma_6}{S_{6}}\right)^2 \geq 1.0$$
+
+    $F_f^{c} = \left(\frac{\sigma_1}{S_{1c}}\right)^2 \geq 1.0$
+
+    $$F_m^{t} = \left(\frac{\sigma_2}{S_{2t}}\right)^2 +
+      \left(\frac{\sigma_6}{S_{6}}\right)^2 \geq 1.0$$
+
+    $$F_m^{c} = \left(\frac{\sigma_2}{2S_{4}}\right)^2 +
+      \left[\left(\frac{S_{2c}}{2S_{6}}\right)^2 - 1 \right]
+      \frac{\sigma_2}{S_{2c}} +
+      \left(\frac{\sigma_6}{S_{6}}\right)^2 \geq 1.0$$
 
     Arguments
     ---------
@@ -324,6 +364,15 @@ def Hashin(stress: vector, mat: Material, alpha: float = 1.0) -> bool:
 def max_stress(stress: vector, mat: Material) -> bool:
     """Checks if stress causes failure according to max stress criterion.
 
+    Failure occurs if any of the following is true:
+
+    $S_{1c} \leq \sigma_1 \geq S_{1t}$
+
+    $S_{2c} \leq \sigma_2 \geq S_{2t}$
+
+    $\sigma_6^2 \geq S_{6}^2$
+
+
     Arguments
     ---------
     stress : NDArray(dtype=float, dim=1)
@@ -358,6 +407,14 @@ def max_stress(stress: vector, mat: Material) -> bool:
 @typechecked
 def max_strain(stress: vector, mat: Material) -> bool:
     """Checks if stress causes failure according to max stress criterion.
+
+    Failure occurs if any of the following terms is true:
+
+    $e_{1c} \leq \epsilon_1 \geq e_{1t}$
+
+    $e_{2c} \leq \epsilon_2 \geq e_{2t}$
+
+    $\epsilon_6^2 \geq e_{6}^2$
 
     Arguments
     ---------
