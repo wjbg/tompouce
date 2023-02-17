@@ -1,4 +1,5 @@
-"""Failure criteria for lamina in plane stress.
+"""
+Contains failure criteria for lamina in plane stress.
 
 Set of functions with failure criteria for composite lamina. The
 functions take (at least) two arguments:
@@ -14,6 +15,7 @@ functions take (at least) two arguments:
    - S2t : Transverse tensile strength
    - S2c : Transverse compressive strength
    - S6  : Shear strength
+
    Some failure criteria may require different or additional strength
    data.
 

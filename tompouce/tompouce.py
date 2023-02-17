@@ -1,4 +1,7 @@
-# Tompouce - An object-oriented implementation of the CLT in Python
+"""
+Contains core of tompouce: material, ply, laminate, load.
+
+"""
 
 from __future__ import annotations
 import numpy as np
