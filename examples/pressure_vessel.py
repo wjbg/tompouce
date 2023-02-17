@@ -6,9 +6,8 @@
 # namely 35, 45, 55, 65 and 75 degrees. Determine which of these
 # vessels will fail as a result of the applied pressure.
 #
-import sys; sys.path.append('../')
 from tompouce import Material, Laminate, pressure_vessel
-from failure_criteria import Tsai_Hill
+from tompouce.failure_criteria import Tsai_Hill
 import numpy as np
 
 

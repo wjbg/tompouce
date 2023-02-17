@@ -5,7 +5,6 @@
 # namely 0.25, 0.5 and 1.0 mm, while the core thickness is veried
 # between 1 and 20 mm.
 #
-import sys; sys.path.append('../')
 from tompouce import Material, Ply, Laminate
 import numpy as np
 import matplotlib.pyplot as plt

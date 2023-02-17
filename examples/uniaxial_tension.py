@@ -6,9 +6,8 @@
 # 1. Determine the Young's modulus in X-direction
 # 2. Check for failure in case a load of 50 kN is applied
 #
-import sys; sys.path.append('../')
 from tompouce import Material, Laminate, Load, QI_layup
-from failure_criteria import Tsai_Hill
+from tompouce.failure_criteria import Tsai_Hill
 import matplotlib.pyplot as plt
 
 # First, we will need an instance of the Material class, which holds

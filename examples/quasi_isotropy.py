@@ -3,7 +3,6 @@
 # Calculate the modulus of a quasi-isotropic and cross-ply laminate as
 # a function of in-plane orientation angle.
 #
-import sys; sys.path.append('../')
 from tompouce import Material, Laminate, QI_layup, CP_layup
 import numpy as np
 import matplotlib.pyplot as plt

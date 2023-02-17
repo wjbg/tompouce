@@ -1,0 +1,16 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "tompouce"
+authors = [{name = "Wouter Grouve", email = "w.j.b.grouve@utwente.nl"}]
+readme = "README.md"
+dynamic = ["version", "description"]
+dependencies = [
+    "numpy >= 1.23.0",
+    "matplotlib >= 3.6.2",
+    "typeguard >= 2.13.3"]
+
+[project.urls]
+Home = "https://github.com/wjbg"

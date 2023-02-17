@@ -6,7 +6,6 @@
 # 1. Calculate the resulting curvature
 # 2. The bending moment required to flatten the laminate
 #
-import sys; sys.path.append('../')
 from tompouce import Material, Ply, Laminate, Load
 from numpy import pi
 

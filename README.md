@@ -72,17 +72,15 @@ give you a pretty good idea what tompouce can do and how things work.
 
 ## Install
 
-You can clone the repository to your folder of choice using
-[git](https://git-scm.com/downloads):
+You can install tompouce using `pip`:
 
 ```
-git clone https://github.com/wjbg/tompouce.git
+pip install git+https://github.com/wjbg/tompouce.git
 ```
 
-Alternatively, you can also download this repository as zip file by
-clicking the green button at the top of this page. Tompouce is
-reasonably well-documented - if I may say so - and the annotated
-examples should be sufficient to get you started.
+Alternatively, you can also clone or download this repository as zip
+file. Tompouce is reasonably well-documented - if I may say so - and
+the annotated examples should be sufficient to get you started.
 
 ## Alternatives
 

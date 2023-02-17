@@ -5,7 +5,6 @@
 # mm. The shaft is loaded with a torque of 500 Nm. Calculate the
 # maximum angular deformation for each shaft.
 #
-import sys; sys.path.append('../')
 from tompouce import Material, Laminate, torsion_shaft
 from numpy import rad2deg, deg2rad
 
