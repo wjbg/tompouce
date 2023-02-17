@@ -35,4 +35,7 @@ failure_criteria
 
 """
 
-from tompouce import *
+__version__ = "0.1.0"
+
+
+from .tompouce import *
