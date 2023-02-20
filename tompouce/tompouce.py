@@ -108,7 +108,7 @@ class Material():
             if data['type'] == 'Material':
                 self.load_from_dict(data)
             else:
-                raise KeyError("not a Load object")
+                raise KeyError("not a Material object")
 
     def save_json(self, fname: str):
         """Saves data to json file."""
@@ -288,7 +288,7 @@ class Ply():
             Strain vector in material CS.
 
         """
-        return Ply._R @ self.T() @ inv(Ply._R) @ strain
+        return Ply._R @ self._T() @ inv(Ply._R) @ strain
 
     def C(self) -> matrix:
         """Returns stiffness matrix."""
