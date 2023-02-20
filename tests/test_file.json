@@ -1,0 +1,10 @@
+{
+    "type" : "Test Material - Do not change!",
+    "E1": 100E9,
+    "E2": 10E9,
+    "G12": 5E9,
+    "alpha1": 1E-06,
+    "alpha2": 1E-05,
+    "v12": 0.25,
+    "type": "Material"
+}
