@@ -6,5 +6,10 @@
     "alpha1": 1E-06,
     "alpha2": 1E-05,
     "v12": 0.25,
-    "type": "Material"
+    "type": "Material",
+    "S1c": 500E6,
+    "S1t": 1000E6,
+    "S2c": 100E6,
+    "S2t": 50E6,
+    "S6": 50E6
 }
