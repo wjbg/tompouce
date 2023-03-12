@@ -298,7 +298,7 @@ def Hashin_Rotem(stress: vector, mat: Material) -> bool:
         HR2 = (stress[1]/mat.S2t)**2 + (stress[2]/mat.S6)**2
     elif stress[1] < 0.0:
         HR2 = (stress[1]/mat.S2c)**2 + (stress[2]/mat.S6)**2
-    failed = True if HR1 >= 1.0 | HR2 >= 1.0 else False
+    failed = True if HR1 >= 1.0 or HR2 >= 1.0 else False
     return failed
 
 
@@ -358,7 +358,7 @@ def Hashin(stress: vector, mat: Material, alpha: float = 1.0) -> bool:
     elif stress[1] < 0.0:
         H2 = ((stress[2]/mat.S6)**2 + (stress[1]/(2*mat.S4))**2 +
               ((mat.S2c/(2*mat.S4))**2 - 1) * (stress[1]/mat.S2c))
-    failed = True if H1 >= 1.0 | H2 >= 1.0 else False
+    failed = True if H1 >= 1.0 or H2 >= 1.0 else False
     return failed
 
 
@@ -397,9 +397,9 @@ def max_stress(stress: vector, mat: Material) -> bool:
 
     """
     failed = False
-    if stress[0] <= -abs(mat.S1c) | stress[0] >= mat.S1t:
+    if stress[0] <= -abs(mat.S1c) or stress[0] >= mat.S1t:
         failed = True
-    if stress[1] <= -abs(mat.S2c) | stress[1] >= mat.S2t:
+    if stress[1] <= -abs(mat.S2c) or stress[1] >= mat.S2t:
         failed = True
     if abs(stress[2]) >= abs(mat.S6):
         failed = True
@@ -441,9 +441,9 @@ def max_strain(stress: vector, mat: Material) -> bool:
     """
     strain = mat.C() @ stress
     failed = False
-    if strain[0] <= -abs(mat.E1c) | strain[0] >= mat.E1t:
+    if strain[0] <= -abs(mat.E1c) or strain[0] >= mat.E1t:
         failed = True
-    if strain[1] <= -abs(mat.E2c) | strain[1] >= mat.E2t:
+    if strain[1] <= -abs(mat.E2c) or strain[1] >= mat.E2t:
         failed = True
     if abs(strain[2]) >= abs(mat.E6):
         failed = True

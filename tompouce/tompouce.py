@@ -467,6 +467,8 @@ class Laminate():
             self.layup = layup
         elif isinstance(layup[0], float):
             self.layup = [Ply(material, phi, thickness) for phi in layup]
+        else:
+            print("Please provide list of floats or Plies.")
 
     def thickness(self) -> float:
         """Returns laminate thickness."""
